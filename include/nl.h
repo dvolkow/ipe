@@ -23,8 +23,6 @@
 
 #define IPE_ARGS_COUNT           3
 
-#define IPE_BE_CONV(data)  (*(__be16 *)(&(data)))
-
 #define NETLINK_USER            31
 #define MAX_PATH_LEN            256
 #define NETNS_RUN_DIR           "/var/run/netns"

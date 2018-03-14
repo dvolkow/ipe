@@ -187,7 +187,7 @@ static int set_eth(const nlmsg_t *msg) {
 #ifdef IPE_DEBUG
         printk(KERN_DEBUG "%s: current proto #%x\n", __FUNCTION__, vlan->vlan_proto);
 #endif
-        vlan->vlan_proto = IPE_BE_CONV(msg->value);
+        vlan->vlan_proto = htons(msg->value);
 #ifdef IPE_DEBUG
         printk(KERN_DEBUG "%s: new proto #%x\n", __FUNCTION__, vlan->vlan_proto);
 #endif
