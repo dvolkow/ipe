@@ -1,5 +1,6 @@
 #! /bin/bash
 set -e
+set -x
 
 VRF_NAME="vrf_test"
 IF_NAME="vlan1"
@@ -8,7 +9,7 @@ VID="42"
 
 function get_ifindex() {
         LIST=`ip a | grep ${PARENT} | grep -o -E '[0-9]+'`
-        echo $LIST | cut -d" " -f2
+        echo `echo $LIST | cut -d" " -f1`
 }
 
 function make_all() {
@@ -32,10 +33,42 @@ function create_vrf() {
         ip link set ${IF_NAME} netns ${VRF_NAME}
 }
 
-make_all
-create_vrf
+function delete_vrf() {
+        ip netns del ${VRF_NAME}
+}
 
-IFINDEX=get_ifindex
-NEW_VID="142"
+function insmod_ipe() {
+        insmod ../kernel/nlKernRec.ko
+}
 
-./ipe dev ${IFINDEX} netns ${VRF_NAME} id ${NEW_VID}
+function rmmod_ipe() {
+        rmmod nlKernRec.ko
+}
+
+if [[ $1 == "make" ]]; then
+        make_all
+fi
+
+if [[ $1 == "create_vrf" ]]; then
+        create_vrf
+fi
+
+if [[ $1 == "ins" ]]; then
+        insmod_ipe
+fi
+
+if [[ $1 == "run" ]]; then
+        IFINDEX=`get_ifindex`
+        NEW_VID="142"
+        echo $IFINDEX
+#        ../ipe dev ${IFINDEX} netns ${VRF_NAME} id ${NEW_VID}
+        ../ipe dev ${IFINDEX} id ${NEW_VID}
+fi
+
+if [[ $1 == "rmmod" ]]; then
+        rmmod_ipe
+fi
+
+if [[ $1 == "delete_vrf" ]]; then
+        delete_vrf
+fi
