@@ -74,7 +74,9 @@ static void printk_msg(const nlmsg_t *msg) {
 
 static int action(const nlmsg_t *msg) {
         int i;
-        printk(KERN_INFO "Entering: %s\n", __FUNCTION__);
+#ifdef IPE_DEBUG
+        printk(KERN_DEBUG "entering: %s\n", __FUNCTION__);
+#endif
         for (i = 0; i < IPE_COMMAND_COUNT; ++i) {
                 if (dict[i].command == msg->command) {
                         dict[i].handler(msg);
@@ -154,13 +156,17 @@ static int set_vid(const nlmsg_t *msg) {
 
         struct vlan_dev_priv *vlan = get_vlan_dev(msg);
         if (!vlan) {
-                printk(KERN_DEBUG "%s: failure of search by index %d\n", __FUNCTION__, msg->ifindex);
+                printk(KERN_ERR "%s: failure of search by index %d\n", __FUNCTION__, msg->ifindex);
                 return IPE_BAD_IF_IDX;
         }
 
+#ifdef IPE_DEBUG
         printk(KERN_DEBUG "%s: current vid #%d\n", __FUNCTION__, vlan->vlan_id);
+#endif
         vlan->vlan_id = msg->value;
+#ifdef IPE_DEBUG
         printk(KERN_DEBUG "%s: new vid #%d\n", __FUNCTION__, vlan->vlan_id);
+#endif
 
         return IPE_OK;
 }
