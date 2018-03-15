@@ -43,6 +43,9 @@ static inline unsigned int vlan_proto_idx(__be16 proto)
 	case htons(ETH_P_8021AD):
 		return VLAN_PROTO_8021AD;
 	default:
+#ifdef IPE_DEBUG
+                printk(KERN_ERR "%s: incorrect vlan protocol %x!\n", __FUNCTION__, proto);
+#endif
 //		BUG();
 		return 0;
 	}

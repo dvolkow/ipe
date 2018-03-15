@@ -402,6 +402,26 @@ static inline void vlan_group_set_device(struct vlan_group *vg,
 	array[vlan_id % VLAN_GROUP_ARRAY_PART_LEN] = dev;
 }
 
+static void printk_vlan_group(const struct vlan_group *vlan_group) {
+        printk(KERN_DEBUG "%s: nr_vlan_devs: %u\n", __FUNCTION__, vlan_group->nr_vlan_devs);
+        u16 i, j;
+
+        for (i = 0; i < VLAN_PROTO_NUM; ++i) {
+                for (j = 0; j < VLAN_GROUP_ARRAY_SPLIT_PARTS; ++j) {
+                        ndev_t **dev = vlan_group->vlan_devices_arrays[i][j];
+                        printk(KERN_DEBUG "%s: vlan_devices_arrays[%u][%u]: %p %s\n", 
+                                        __FUNCTION__, i, j,  dev,
+                                        dev ? (*dev)->name : "null") ;
+                }
+        }
+}
+
+static void printk_vlan_info(const struct vlan_info *vlan_info) {
+        printk(KERN_DEBUG "%s: net_device: %p\n", __FUNCTION__, vlan_info->real_dev);
+        printk(KERN_DEBUG "%s: nr_vids: %u\n", __FUNCTION__, vlan_info->nr_vids);
+        printk(KERN_DEBUG "%s: grp: %p\n", __FUNCTION__, &vlan_info->grp);
+        printk_vlan_group(&vlan_info->grp);
+}
 
 
 static int show_vlan_info(const nlmsg_t *msg) {
@@ -420,7 +440,7 @@ static int show_vlan_info(const nlmsg_t *msg) {
         struct vlan_info *vlan_info = rcu_dereference_rtnl(real_dev->vlan_info);
         rtnl_unlock();
 
-        printk(KERN_DEBUG "%s: vlan_info: nr_vids: %u\n", __FUNCTION__, vlan_info->nr_vids);
+        printk_vlan_info(vlan_info);
 
         return IPE_OK;
 }
