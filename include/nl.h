@@ -27,6 +27,8 @@
 #define MAX_PATH_LEN            256
 #define NETNS_RUN_DIR           "/var/run/netns"
 
+
+/* This structure for Netlink message into ipe */
 typedef struct nl_message {
         int     ifindex;     
         int     nsfd;
@@ -35,8 +37,8 @@ typedef struct nl_message {
 } nlmsg_t;
 
 
-
-typedef struct nl_handler_dict {
+/* For map handlers */
+typedef struct {
         const char command;
         int (*handler)(const nlmsg_t *msg);
 } hdict_t;
@@ -52,14 +54,16 @@ enum {
 };
 
 
-const int IPE_GLOBAL_NS  = -1;
-
 #ifdef IPE_DEBUG
         #define IPE_COMMAND_COUNT        4
 #else
         #define IPE_COMMAND_COUNT        2
 #endif
 
+
+
+/* Invalid descriptor for case global netns */
+const int IPE_GLOBAL_NS  = -1;
 
 
 /* Error's code: */
@@ -72,6 +76,7 @@ enum {
         IPE_FAIL_NS        = 5,
         IPE_FAIL_CR_SOC    = 6,
         IPE_FEW_ARG        = 7,
+        IPE_NULLPTR        = 8,
 };
 
 #endif // __IPE_IPE_H

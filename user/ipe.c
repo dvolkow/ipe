@@ -15,8 +15,12 @@
 #define NEXT_ARG(args, argv) (argv++, args--)
 #define CHECK_ARGS(args) (args - 1 > 0)
 
+
 typedef struct nlmsghdr nmsgh_t;
 
+
+
+/* Parser's structure for create Netlink message */
 typedef struct {
         char *net;
         char *ctype;
@@ -56,6 +60,7 @@ static void prepare(void) {
 
 
 
+/* This function is paste from iproute2 */
 static int get_netns_fd(const char *name)
 {
         char pathbuf[MAX_PATH_LEN];
@@ -70,6 +75,7 @@ static int get_netns_fd(const char *name)
         }
         return open(path, O_RDONLY);
 }
+
 
 
 static void create_msg(nmsgh_t *nlh) {
@@ -87,6 +93,8 @@ static void create_msg(nmsgh_t *nlh) {
                 msgs.command = IPE_SET_VID;
         else if (!strcmp(g_arg.ctype, "eth"))
                 msgs.command = IPE_SET_ETH;
+        else if (!strcmp(g_arg.ctype, "parent"))
+                msgs.command = IPE_PRINT_ADDR;
 
 #ifdef IPE_DEBUG
         printf("%s: memcpy %lu to %s\n", __FUNCTION__, sizeof(msgs), (char *)nlh);
@@ -191,6 +199,9 @@ static int parse_arg(int args, char **argv) {
                         } else {
                                 goto usage_ret;
                         }
+                } else if (matches("parent")) {
+                        g_arg.ctype = *argv;
+                        goto ret_ok;
                 } else {
                         printf("%s: arg \"%s\" not matches\n", __FUNCTION__, *argv);
                         goto usage_ret;
