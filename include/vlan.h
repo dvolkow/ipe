@@ -1,3 +1,25 @@
+/******************************************************************************
+*
+*                       GNU GENERAL PUBLIC LICENSE
+*       Copyright © 2018 Free Software Foundation, Inc. <https://fsf.org/>
+*
+* Everyone is permitted to copy and distribute verbatim copies of this license 
+* document, but changing it is not allowed.
+*
+*
+* 
+*
+* Author:
+*   March, 2018        Daniel Wolkow            
+*
+*
+* Description:
+*     This extends the capabilities of network utilities (such as iproute2). 
+* The initial motivation for this was the possibility of changing the vlan_id 
+* and vlan_proto "on the spot," without having to remove the network interfaces 
+*
+******************************************************************************/
+
 #ifndef __IPE_VLAN_H
 #define __IPE_VLAN_H
 
