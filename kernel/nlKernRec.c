@@ -47,7 +47,9 @@ static int set_eth(const nlmsg_t *msg);
 
 #ifdef IPE_DEBUG
 static int net_namespace_list_print(const nlmsg_t *msg);
+#if 0
 static int test_find(const nlmsg_t *msg);
+#endif
 static int show_vlan_info(const nlmsg_t *msg);
 #endif
 
@@ -76,6 +78,9 @@ static void printk_msg(const nlmsg_t *msg) {
 
 
 
+/*
+ * Fetch needed ops
+ */
 static int action(const nlmsg_t *msg) {
         int i;
 #ifdef IPE_DEBUG
@@ -92,6 +97,9 @@ static int action(const nlmsg_t *msg) {
 
 
 
+/*
+ * Find device into custom namespace
+ */
 static ndev_t *find_device(const nlmsg_t *msg) {
         struct net    *net; // namespace
         ndev_t *dev;
@@ -126,6 +134,9 @@ unlock_fail:
 
 
 
+/*
+ * Fetch find case in dependency of type namespace (defaulf/custom)
+ */
 static ndev_t *get_dev(const nlmsg_t *msg) {
         if (msg->nsfd == IPE_GLOBAL_NS) {
 #ifdef IPE_DEBUG
@@ -145,7 +156,61 @@ static ndev_t *get_dev(const nlmsg_t *msg) {
 
 
 
-static int unregister_vlan_dev_ipe(ndev_t *dev) {
+/* Modified version of unregister_vlan_dev from kernel net/8021q/vlan.c
+ *
+ * temporary solution
+ * @dev: vlan interface that will be changed
+ */
+static int pseudo_unregister_vlan_dev(ndev_t *dev) {
+        struct vlan_dev_priv *vlan = vlan_dev_priv(dev);
+        ndev_t *real_dev           = vlan->real_dev;
+        struct vlan_info  *vlan_info;
+        struct vlan_group *grp;
+        u16 vlan_id = vlan->vlan_id;
+
+        ASSERT_RTNL();
+
+        vlan_info = rtnl_dereference(real_dev->vlan_info);
+        BUG_ON(!vlan_info);
+
+        grp = &vlan_info->grp;
+
+        vlan_group_del_device(grp, vlan->vlan_proto, vlan_id);
+
+        return IPE_OK;
+}
+
+
+static int pseudo_register_vlan_dev(ndev_t *dev) {
+        struct vlan_dev_priv *vlan = vlan_dev_priv(dev);
+        ndev_t *real_dev           = vlan->real_dev;
+        u16 vlan_id                = vlan->vlan_id;
+        struct vlan_info  *vlan_info;
+        struct vlan_group *grp;
+        int err;
+
+
+        err = vlan_vid_add(real_dev, vlan->vlan_proto, vlan_id);
+        if (err)
+                return err;
+
+        ASSERT_RTNL();
+
+        vlan_info = rtnl_dereference(real_dev->vlan_info);
+        /* vlan_info should be there now. vlan_vid_add took care of it */
+        BUG_ON(!vlan_info);
+
+        grp = &vlan_info->grp;
+
+        err = vlan_group_prealloc_vid(grp, vlan->vlan_proto, vlan_id);	
+        if (err < 0)
+                goto fail_reg;
+
+        return IPE_OK;
+
+fail_reg:
+        vlan_vid_del(real_dev, vlan->vlan_proto, vlan_id);
+        return err;
 }
 
 
@@ -160,10 +225,9 @@ static int set_vid(const nlmsg_t *msg) {
                 goto set_fail;
 
         if (!is_vlan_dev(vlan_dev)) {
-                printk(KERN_ERR "%s: device %s is not vlan type!\n", __FUNCTION__, vlan_dev);
+                printk(KERN_ERR "%s: device %s is not vlan type!\n", __FUNCTION__, vlan_dev->name);
                 goto set_fail;
         }
-
         struct vlan_dev_priv *vlan = vlan_dev_priv(vlan_dev);
         if (!vlan) {
                 printk(KERN_ERR "%s: failure of search by index %d\n", __FUNCTION__, msg->ifindex);
@@ -204,6 +268,7 @@ static int set_vid(const nlmsg_t *msg) {
 #endif
         vlan_group_set_device(&vlan_info->grp,
                                vlan->vlan_proto, vlan->vlan_id, vlan_dev);
+        // here will be: grp->nr_vlan_devs++;
 
         return IPE_OK;
 
@@ -225,7 +290,7 @@ static int set_eth(const nlmsg_t *msg) {
                 goto set_fail;
 
         if (!is_vlan_dev(vlan_dev)) {
-                printk(KERN_ERR "%s: device %s is not vlan type!\n", __FUNCTION__, vlan_dev);
+                printk(KERN_ERR "%s: device %s is not vlan type!\n", __FUNCTION__, vlan_dev->name);
                 goto set_fail;
         }
 
@@ -276,6 +341,9 @@ set_fail:
 
 
 
+/*
+ * Call hadler for required ops
+ */
 static void vlan_ext_handler(struct sk_buff *skb) {
         struct  nlmsghdr *nlh;
         nlmsg_t *msg;
@@ -386,6 +454,7 @@ static int net_namespace_list_print(const nlmsg_t *msg) {
 
 
 
+#if 0
 static int test_find(const nlmsg_t *msg) {
         ndev_t *dev = find_device(msg);
         if (!dev) {
@@ -396,7 +465,7 @@ static int test_find(const nlmsg_t *msg) {
         printk(KERN_DEBUG "%s: find dev %p, name %s, ifindex %d\n", __FUNCTION__, dev, dev->name, dev->ifindex);
         return IPE_OK;
 }
-
+#endif
 
 static inline void vlan_group_del_device(struct vlan_group *vg,
 					 __be16 vlan_proto, u16 vlan_id)

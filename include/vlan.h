@@ -59,24 +59,50 @@ struct vlan_info {
 
 static inline unsigned int vlan_proto_idx(__be16 proto)
 {
-	switch (proto) {
-	case htons(ETH_P_8021Q):
-		return VLAN_PROTO_8021Q;
-	case htons(ETH_P_8021AD):
-		return VLAN_PROTO_8021AD;
-	default:
+        switch (proto) {
+        case htons(ETH_P_8021Q):
+                return VLAN_PROTO_8021Q;
+        case htons(ETH_P_8021AD):
+                return VLAN_PROTO_8021AD;
+        default:
 #ifdef IPE_DEBUG
-                printk(KERN_ERR "%s: incorrect vlan protocol %x!\n", __FUNCTION__, proto);
+                printk(KERN_ERR "%s: incorrect vlan protocol %x!\n", 
+                                                 __FUNCTION__, proto);
 #endif
 //		BUG();
-		return 0;
-	}
+                return 0;
+        }
 }
 
 static inline void vlan_group_del_device(struct vlan_group *vg,
-					 __be16 vlan_proto, u16 vlan_id);
+                                        __be16 vlan_proto, u16 vlan_id);
 
 static inline void vlan_group_set_device(struct vlan_group *vg,
-					 __be16 vlan_proto, u16 vlan_id,
-					 struct net_device *dev);
+                                        __be16 vlan_proto, u16 vlan_id,
+                                        struct net_device *dev);
+
+static int vlan_group_prealloc_vid(struct vlan_group *vg,
+                                        __be16 vlan_proto, u16 vlan_id)
+{
+        struct net_device **array;
+        unsigned int pidx, vidx;
+        unsigned int size;
+
+        ASSERT_RTNL();
+
+        pidx  = vlan_proto_idx(vlan_proto);
+        vidx  = vlan_id / VLAN_GROUP_ARRAY_PART_LEN;
+        array = vg->vlan_devices_arrays[pidx][vidx];
+        if (array != NULL)
+                return 0;
+
+        size = sizeof(struct net_device *) * VLAN_GROUP_ARRAY_PART_LEN;
+        array = kzalloc(size, GFP_KERNEL);
+        if (array == NULL)
+                return -ENOBUFS;
+
+        vg->vlan_devices_arrays[pidx][vidx] = array;
+        return 0;
+}
+
 #endif  //__IPE_VLAN_H
