@@ -144,6 +144,9 @@ static ndev_t *get_dev(const nlmsg_t *msg) {
 
 
 
+static int unregister_vlan_dev_ipe(ndev_t *dev) {
+}
+
 
 static int set_vid(const nlmsg_t *msg) {
 #ifdef IPE_DEBUG
@@ -154,6 +157,11 @@ static int set_vid(const nlmsg_t *msg) {
         ndev_t *vlan_dev = get_dev(msg);
         if (!vlan_dev)
                 goto set_fail;
+
+        if (!is_vlan_dev(vlan_dev)) {
+                printk(KERN_ERR "%s: device %s is not vlan type!\n", __FUNCTION__, vlan_dev);
+                goto set_fail;
+        }
 
         struct vlan_dev_priv *vlan = vlan_dev_priv(vlan_dev);
         if (!vlan) {
@@ -214,6 +222,11 @@ static int set_eth(const nlmsg_t *msg) {
         ndev_t *vlan_dev = get_dev(msg);
         if (!vlan_dev)
                 goto set_fail;
+
+        if (!is_vlan_dev(vlan_dev)) {
+                printk(KERN_ERR "%s: device %s is not vlan type!\n", __FUNCTION__, vlan_dev);
+                goto set_fail;
+        }
 
         struct vlan_dev_priv *vlan = vlan_dev_priv(vlan_dev);
         if (!vlan) {
