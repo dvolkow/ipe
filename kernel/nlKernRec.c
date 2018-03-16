@@ -7,15 +7,16 @@
 * document, but changing it is not allowed.
 *
 *
-* Functions:
-* 
 * 
 *
 * Author:
 *   March, 2018        Daniel Wolkow            
 *
+*
 * Description:
-* Implementation of 
+*     This extends the capabilities of network utilities (such as iproute2). 
+* The initial motivation for this was the possibility of changing the vlan_id 
+* and vlan_proto "on the spot," without having to remove the network interfaces 
 *
 ******************************************************************************/
 
