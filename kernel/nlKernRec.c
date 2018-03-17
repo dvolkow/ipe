@@ -168,6 +168,9 @@ static int pseudo_unregister_vlan_dev(ndev_t *dev) {
         struct vlan_group *grp;
         u16 vlan_id = vlan->vlan_id;
 
+#ifdef IPE_DEBUG
+        printk(KERN_DEBUG "%s: entry, dev %p\n", __FUNCTION__, dev);
+#endif
         ASSERT_RTNL();
 
         vlan_info = rtnl_dereference(real_dev->vlan_info);
@@ -189,6 +192,9 @@ static int pseudo_register_vlan_dev(ndev_t *dev) {
         struct vlan_group *grp;
         int err;
 
+#ifdef IPE_DEBUG
+        printk(KERN_DEBUG "%s: entry, dev %p\n", __FUNCTION__, dev);
+#endif
 
         err = vlan_vid_add(real_dev, vlan->vlan_proto, vlan_id);
         if (err)
@@ -209,6 +215,7 @@ static int pseudo_register_vlan_dev(ndev_t *dev) {
         return IPE_OK;
 
 fail_reg:
+        printk(KERN_ERR "%s: fail\n", __FUNCTION__);
         vlan_vid_del(real_dev, vlan->vlan_proto, vlan_id);
         return err;
 }
@@ -234,6 +241,7 @@ static int set_vid(const nlmsg_t *msg) {
                 return IPE_BAD_IF_IDX;
         }
 
+        /*
         int old_vlan_id = vlan->vlan_id;
 #ifdef IPE_DEBUG
         printk(KERN_DEBUG "%s: current vid #%d\n", __FUNCTION__, old_vlan_id);
@@ -250,10 +258,15 @@ static int set_vid(const nlmsg_t *msg) {
 #ifdef IPE_DEBUG
         printk(KERN_DEBUG "%s: find parent: %s by addr %p\n", __FUNCTION__, real_dev->name, real_dev);
 #endif
+        */
         rtnl_lock();
-        struct vlan_info *vlan_info = rcu_dereference_rtnl(real_dev->vlan_info);
+        //struct vlan_info *vlan_info = rcu_dereference_rtnl(real_dev->vlan_info);
+        pseudo_unregister_vlan_dev(vlan_dev);
+        vlan->vlan_id = msg->value;
+        pseudo_register_vlan_dev(vlan_dev);
         rtnl_unlock();
 
+        /*
         if (!vlan_info) 
                 goto set_fail;
 
@@ -269,6 +282,7 @@ static int set_vid(const nlmsg_t *msg) {
         vlan_group_set_device(&vlan_info->grp,
                                vlan->vlan_proto, vlan->vlan_id, vlan_dev);
         // here will be: grp->nr_vlan_devs++;
+        */
 
         return IPE_OK;
 
