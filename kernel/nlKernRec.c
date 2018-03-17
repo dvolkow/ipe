@@ -118,6 +118,7 @@ static ndev_t *find_device(const nlmsg_t *msg) {
 
         for_each_netdev(net, dev) {
                 if (dev->ifindex == msg->ifindex) {
+                        dev_hold(dev);
                         rtnl_unlock();
                         return dev;
                 }
@@ -221,6 +222,23 @@ fail_reg:
 }
 
 
+static int replace_vid_on_dev(const ndev_t *dev, const nlmsg_t *msg) {
+        struct vlan_dev_priv *vlan = vlan_dev_priv(dev);
+        int old_vlan_id = vlan->vlan_id;
+#ifdef IPE_DEBUG
+        printk(KERN_DEBUG "%s: current vid #%d\n", __FUNCTION__, old_vlan_id);
+#endif
+        vlan->vlan_id = msg->value;
+#ifdef IPE_DEBUG
+        printk(KERN_DEBUG "%s: new vid #%d\n", __FUNCTION__, vlan->vlan_id);
+#endif
+
+#ifdef IPE_DEBUG
+        printk(KERN_DEBUG "%s: bottom half...\n", __FUNCTION__);
+#endif
+        return IPE_OK;
+}
+
 static int set_vid(const nlmsg_t *msg) {
 #ifdef IPE_DEBUG
         printk(KERN_DEBUG "%s has been called\n", __FUNCTION__);
@@ -235,13 +253,13 @@ static int set_vid(const nlmsg_t *msg) {
                 printk(KERN_ERR "%s: device %s is not vlan type!\n", __FUNCTION__, vlan_dev->name);
                 goto set_fail;
         }
+        /*
         struct vlan_dev_priv *vlan = vlan_dev_priv(vlan_dev);
         if (!vlan) {
                 printk(KERN_ERR "%s: failure of search by index %d\n", __FUNCTION__, msg->ifindex);
                 return IPE_BAD_IF_IDX;
         }
 
-        /*
         int old_vlan_id = vlan->vlan_id;
 #ifdef IPE_DEBUG
         printk(KERN_DEBUG "%s: current vid #%d\n", __FUNCTION__, old_vlan_id);
@@ -262,7 +280,7 @@ static int set_vid(const nlmsg_t *msg) {
         rtnl_lock();
         //struct vlan_info *vlan_info = rcu_dereference_rtnl(real_dev->vlan_info);
         pseudo_unregister_vlan_dev(vlan_dev);
-        vlan->vlan_id = msg->value;
+        replace_vid_on_dev(vlan_dev, msg);
         pseudo_register_vlan_dev(vlan_dev);
         rtnl_unlock();
 
@@ -284,6 +302,7 @@ static int set_vid(const nlmsg_t *msg) {
         // here will be: grp->nr_vlan_devs++;
         */
 
+        dev_put(vlan_dev);
         return IPE_OK;
 
 set_fail:
