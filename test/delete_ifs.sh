@@ -6,3 +6,6 @@ CHILD="vlan1"
 
 ip link 'set' ${CHILD} 'down'
 ip link delete ${CHILD}
+CHILD="vlan2"
+ip link 'set' ${CHILD} 'down'
+ip link delete ${CHILD}

@@ -266,8 +266,9 @@ static int set_vid(const nlmsg_t *msg) {
         int old_vlan_id  = vlan->vlan_id;
         ndev_t *real_dev = vlan->real_dev;
 
+        rtnl_lock();
         if (vlan_vid_add(real_dev, vlan->vlan_proto, msg->value))
-                goto set_fail_del;
+                goto set_rtnl_unlock;
 
 #ifdef IPE_DEBUG
         printk(KERN_DEBUG "%s: current vid #%d\n", __FUNCTION__, old_vlan_id);
@@ -284,7 +285,6 @@ static int set_vid(const nlmsg_t *msg) {
         printk(KERN_DEBUG "%s: find parent: %s by addr %p\n", 
                                         __FUNCTION__, real_dev->name, real_dev);
 #endif
-        rtnl_lock();
 #ifdef IPE_DEBUG
         printk(KERN_DEBUG "%s: rtnl_lock (%d)\n", __FUNCTION__, __LINE__);
 #endif
@@ -317,7 +317,6 @@ static int set_vid(const nlmsg_t *msg) {
 
 set_rtnl_unlock:
         rtnl_unlock();
-set_fail_del:
         vlan_vid_del(real_dev, vlan->vlan_proto, vlan->vlan_id);
 set_fail_put:
         dev_put(vlan_dev);
