@@ -52,16 +52,22 @@ enum {
         IPE_SET_ETH    = 1, 
         /* debug: */
         IPE_PRINT_ADDR = 2,
-        IPE_PRINT_NS   = 3,
 };
 
 
 #ifdef IPE_DEBUG
-        #define IPE_COMMAND_COUNT        4
+        #define IPE_COMMAND_COUNT        3 // one debug func extended
 #else
         #define IPE_COMMAND_COUNT        2
 #endif
 
+
+#ifdef IPE_DEBUG
+        #define LOG_RTNL_LOCK()    printk(KERN_ERR "%s: rtnl_lock (%d)\n", \
+                                                __FUNCTION__, __LINE__)
+        #define LOG_RTNL_UNLOCK()  printk(KERN_ERR "%s: rtnl_unlock (%d)\n", \
+                                                __FUNCTION__, __LINE__)
+#endif
 
 
 /* Invalid descriptor for case global netns */

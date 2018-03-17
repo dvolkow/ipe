@@ -74,12 +74,25 @@ static inline unsigned int vlan_proto_idx(__be16 proto)
         }
 }
 
-static inline void vlan_group_del_device(struct vlan_group *vg,
-                                        __be16 vlan_proto, u16 vlan_id);
 
 static inline void vlan_group_set_device(struct vlan_group *vg,
-                                        __be16 vlan_proto, u16 vlan_id,
-                                        struct net_device *dev);
+					 __be16 vlan_proto, u16 vlan_id,
+					 struct net_device *dev)
+{
+	struct net_device **array;
+	if (!vg)
+		return;
+	array = vg->vlan_devices_arrays[vlan_proto_idx(vlan_proto)]
+				       [vlan_id / VLAN_GROUP_ARRAY_PART_LEN];
+	array[vlan_id % VLAN_GROUP_ARRAY_PART_LEN] = dev;
+}
+
+static inline void vlan_group_del_device(struct vlan_group *vg,
+					 __be16 vlan_proto, u16 vlan_id)
+{
+        vlan_group_set_device(vg, vlan_proto, vlan_id, NULL);
+}
+
 
 static int vlan_group_prealloc_vid(struct vlan_group *vg,
                                         __be16 vlan_proto, u16 vlan_id)
