@@ -42,7 +42,6 @@
 typedef struct net_device ndev_t;
 
 
-static int old_set_vid(const nlmsg_t *msg);
 static int set_vid(const nlmsg_t *msg);
 static int set_eth(const nlmsg_t *msg);
 
@@ -58,7 +57,7 @@ static struct sock *nl_sk = NULL;
 
 static hdict_t dict[IPE_COMMAND_COUNT] = {
         { IPE_SET_ETH, set_eth },
-        { IPE_SET_VID, old_set_vid },
+        { IPE_SET_VID, set_vid },
         /* debug: */
 #ifdef IPE_DEBUG
         { IPE_PRINT_ADDR, show_vlan_info },
@@ -142,21 +141,25 @@ unlock_fail:
 static ndev_t *get_dev(const nlmsg_t *msg) {
         if (msg->nsfd == IPE_GLOBAL_NS) {
 #ifdef IPE_DEBUG
-                printk(KERN_DEBUG "%s: global namespace search...\n", __FUNCTION__);
+                printk(KERN_DEBUG "%s: global namespace search...\n",
+                                                        __FUNCTION__);
 #endif
                 return dev_get_by_index(&init_net, msg->ifindex);
         } else {
 #ifdef IPE_DEBUG
-                printk(KERN_DEBUG "%s: %d namespace search...\n", __FUNCTION__, msg->nsfd);
+                printk(KERN_DEBUG "%s: %d namespace search...\n", 
+                                             __FUNCTION__, msg->nsfd);
 #endif
                 return find_device(msg);
         }
 
-        printk(KERN_ERR "%s: failure of search by index %d\n", __FUNCTION__, msg->ifindex);
+        printk(KERN_ERR "%s: failure of search by index %d\n", 
+                                          __FUNCTION__, msg->ifindex);
         return NULL;
 }
 
 
+#if 0
 
 /* Modified version of unregister_vlan_dev from kernel net/8021q/vlan.c
  *
@@ -241,99 +244,31 @@ static int replace_vid_on_dev(const ndev_t *dev, const nlmsg_t *msg) {
 #endif
         return IPE_OK;
 }
-
-
-
-
-static int old_set_vid(const nlmsg_t *msg) {
-#ifdef IPE_DEBUG
-        printk(KERN_DEBUG "%s has been called\n", __FUNCTION__);
 #endif
-
-        ndev_t *vlan_dev = get_dev(msg);
-        if (!vlan_dev)
-                goto set_fail;
-
-        if (!is_vlan_dev(vlan_dev)) {
-                printk(KERN_ERR "%s: device %s is not vlan type!\n", __FUNCTION__, vlan_dev->name);
-                goto set_fail_put;
-        }
-        struct vlan_dev_priv *vlan = vlan_dev_priv(vlan_dev);
-        if (!vlan) {
-                printk(KERN_ERR "%s: failure of search by index %d\n", __FUNCTION__, msg->ifindex);
-                return IPE_BAD_IF_IDX;
-        }
-
-        int old_vlan_id = vlan->vlan_id;
-#ifdef IPE_DEBUG
-        printk(KERN_DEBUG "%s: current vid #%d\n", __FUNCTION__, old_vlan_id);
-#endif
-        vlan->vlan_id = msg->value;
-#ifdef IPE_DEBUG
-        printk(KERN_DEBUG "%s: new vid #%d\n", __FUNCTION__, vlan->vlan_id);
-#endif
-
-#ifdef IPE_DEBUG
-        printk(KERN_DEBUG "%s: bottom half...\n", __FUNCTION__);
-#endif
-        ndev_t *real_dev = vlan->real_dev;
-#ifdef IPE_DEBUG
-        printk(KERN_DEBUG "%s: find parent: %s by addr %p\n", __FUNCTION__, real_dev->name, real_dev);
-#endif
-        rtnl_lock();
-        struct vlan_info *vlan_info = rcu_dereference_rtnl(real_dev->vlan_info);
-        rtnl_unlock();
-
-        if (!vlan_info)
-                goto set_fail;
-
-
-#ifdef IPE_DEBUG
-        printk(KERN_DEBUG "%s: delete old dev\n", __FUNCTION__);
-#endif
-        vlan_group_del_device(&vlan_info->grp,
-                               vlan->vlan_proto, old_vlan_id);
-#ifdef IPE_DEBUG
-        printk(KERN_DEBUG "%s: set new dev\n", __FUNCTION__);
-#endif
-        vlan_group_set_device(&vlan_info->grp,
-                               vlan->vlan_proto, vlan->vlan_id, vlan_dev);
-        // here will be: grp->nr_vlan_devs++;
-
-        dev_put(vlan_dev);
-        return IPE_OK;
-
-set_fail_put:
-        dev_put(vlan_dev);
-set_fail:
-        printk(KERN_ERR "%s: fail\n", __FUNCTION__);
-        return IPE_NULLPTR;
-}
-
 
 
 static int set_vid(const nlmsg_t *msg) {
 #ifdef IPE_DEBUG
         printk(KERN_DEBUG "%s has been called\n", __FUNCTION__);
 #endif
-
-
         ndev_t *vlan_dev = get_dev(msg);
         if (!vlan_dev)
                 goto set_fail;
 
         if (!is_vlan_dev(vlan_dev)) {
-                printk(KERN_ERR "%s: device %s is not vlan type!\n", __FUNCTION__, vlan_dev->name);
+                printk(KERN_ERR "%s: device %s is not vlan type!\n", 
+                                                __FUNCTION__, vlan_dev->name);
                 goto set_fail_put;
         }
-        /*
         struct vlan_dev_priv *vlan = vlan_dev_priv(vlan_dev);
-        if (!vlan) {
-                printk(KERN_ERR "%s: failure of search by index %d\n", __FUNCTION__, msg->ifindex);
-                return IPE_BAD_IF_IDX;
-        }
+        BUG_ON(!vlan);
 
-        int old_vlan_id = vlan->vlan_id;
+        int old_vlan_id  = vlan->vlan_id;
+        ndev_t *real_dev = vlan->real_dev;
+
+        if (vlan_vid_add(real_dev, vlan->vlan_proto, msg->value))
+                goto set_fail_del;
+
 #ifdef IPE_DEBUG
         printk(KERN_DEBUG "%s: current vid #%d\n", __FUNCTION__, old_vlan_id);
 #endif
@@ -345,23 +280,23 @@ static int set_vid(const nlmsg_t *msg) {
 #ifdef IPE_DEBUG
         printk(KERN_DEBUG "%s: bottom half...\n", __FUNCTION__);
 #endif
-        ndev_t *real_dev = vlan->real_dev;
 #ifdef IPE_DEBUG
-        printk(KERN_DEBUG "%s: find parent: %s by addr %p\n", __FUNCTION__, real_dev->name, real_dev);
+        printk(KERN_DEBUG "%s: find parent: %s by addr %p\n", 
+                                        __FUNCTION__, real_dev->name, real_dev);
 #endif
-        */
         rtnl_lock();
-        //struct vlan_info *vlan_info = rcu_dereference_rtnl(real_dev->vlan_info);
-        pseudo_unregister_vlan_dev(vlan_dev);
-        replace_vid_on_dev(vlan_dev, msg);
-        pseudo_register_vlan_dev(vlan_dev);
+        struct vlan_info *vlan_info = rcu_dereference_rtnl(real_dev->vlan_info);
         rtnl_unlock();
-
-        /*
-        if (!vlan_info) 
-                goto set_fail;
+        /* vlan_info should be there now. vlan_vid_add took care of it */
+        BUG_ON(!vlan_info);
 
 
+        struct vlan_group *grp = &vlan_info->grp;
+        if (vlan_group_prealloc_vid(grp, vlan->vlan_proto, vlan->vlan_id) < 0) {
+                printk(KERN_ERR "%s: fail alloc memory for vlan group!\n", 
+                                                                __FUNCTION__);
+                goto set_fail_del;
+        }
 #ifdef IPE_DEBUG
         printk(KERN_DEBUG "%s: delete old dev\n", __FUNCTION__);
 #endif
@@ -373,7 +308,43 @@ static int set_vid(const nlmsg_t *msg) {
         vlan_group_set_device(&vlan_info->grp,
                                vlan->vlan_proto, vlan->vlan_id, vlan_dev);
         // here will be: grp->nr_vlan_devs++;
-        */
+
+        dev_put(vlan_dev);
+        return IPE_OK;
+
+set_fail_del:
+        vlan_vid_del(real_dev, vlan->vlan_proto, vlan->vlan_id);
+set_fail_put:
+        dev_put(vlan_dev);
+set_fail:
+        printk(KERN_ERR "%s: fail\n", __FUNCTION__);
+        return IPE_NULLPTR;
+}
+
+
+
+#if 0
+static int old_set_vid(const nlmsg_t *msg) {
+#ifdef IPE_DEBUG
+        printk(KERN_DEBUG "%s has been called\n", __FUNCTION__);
+#endif
+
+
+        ndev_t *vlan_dev = get_dev(msg);
+        if (!vlan_dev)
+                goto set_fail;
+
+        if (!is_vlan_dev(vlan_dev)) {
+                printk(KERN_ERR "%s: device %s is not vlan type!\n", 
+                                        __FUNCTION__, vlan_dev->name);
+                goto set_fail_put;
+        }
+
+        rtnl_lock();
+                pseudo_unregister_vlan_dev(vlan_dev);
+                replace_vid_on_dev(vlan_dev, msg);
+                pseudo_register_vlan_dev(vlan_dev);
+        rtnl_unlock();
 
         dev_put(vlan_dev);
         return IPE_OK;
@@ -384,7 +355,7 @@ set_fail:
         printk(KERN_ERR "%s: fail\n", __FUNCTION__);
         return IPE_NULLPTR;
 }
-
+#endif
 
 
 
@@ -398,24 +369,28 @@ static int set_eth(const nlmsg_t *msg) {
                 goto set_fail;
 
         if (!is_vlan_dev(vlan_dev)) {
-                printk(KERN_ERR "%s: device %s is not vlan type!\n", __FUNCTION__, vlan_dev->name);
+                printk(KERN_ERR "%s: device %s is not vlan type!\n", 
+                                        __FUNCTION__, vlan_dev->name);
                 goto set_fail;
         }
 
         struct vlan_dev_priv *vlan = vlan_dev_priv(vlan_dev);
         if (!vlan) {
 set_fail:
-                printk(KERN_ERR "%s: failure of search by index %d\n", __FUNCTION__, msg->ifindex);
+                printk(KERN_ERR "%s: failure of search by index %d\n", 
+                                                __FUNCTION__, msg->ifindex);
                 return IPE_BAD_IF_IDX;
         }
 
         __be16 old_vlan_proto = vlan->vlan_proto;
 #ifdef IPE_DEBUG
-        printk(KERN_DEBUG "%s: current proto #%x\n", __FUNCTION__, old_vlan_proto);
+        printk(KERN_DEBUG "%s: current proto #%x\n", 
+                                        __FUNCTION__, old_vlan_proto);
 #endif
         vlan->vlan_proto = htons(msg->value);
 #ifdef IPE_DEBUG
-        printk(KERN_DEBUG "%s: new proto #%x\n", __FUNCTION__, vlan->vlan_proto);
+        printk(KERN_DEBUG "%s: new proto #%x\n", 
+                                        __FUNCTION__, vlan->vlan_proto);
 #endif
 
 #ifdef IPE_DEBUG
@@ -423,7 +398,8 @@ set_fail:
 #endif
         ndev_t *real_dev = vlan->real_dev;
 #ifdef IPE_DEBUG
-        printk(KERN_DEBUG "%s: find parent: %s by addr %p\n", __FUNCTION__, real_dev->name, real_dev);
+        printk(KERN_DEBUG "%s: find parent: %s by addr %p\n", 
+                                        __FUNCTION__, real_dev->name, real_dev);
 #endif
         rtnl_lock();
         struct vlan_info *vlan_info = rcu_dereference_rtnl(real_dev->vlan_info);
@@ -515,11 +491,13 @@ static int printk_addr_by_idx(const nlmsg_t *msg) {
         printk(KERN_DEBUG "%s has been called\n", __FUNCTION__);
         ndev_t *dev = dev_get_by_index(&init_net, msg->ifindex);
         if (!dev) {
-                printk(KERN_DEBUG "%s: failure of search by index %d\n", __FUNCTION__, msg->ifindex);
+                printk(KERN_DEBUG "%s: failure of search by index %d\n", 
+                                                __FUNCTION__, msg->ifindex);
                 return IPE_BAD_IF_IDX;
         }
 
-        printk(KERN_DEBUG "%s: device by index %d: %p\n", __FUNCTION__, msg->ifindex, dev);
+        printk(KERN_DEBUG "%s: device by index %d: %p\n", 
+                                                __FUNCTION__, msg->ifindex, dev);
         return IPE_OK;
 }
 
@@ -532,7 +510,8 @@ static int print_list_ndev(const nlmsg_t *msg) {
         read_lock(&dev_base_lock);
         dev = first_net_device(&init_net);
         while (dev) {
-                printk(KERN_INFO "%s: found [%s]:%p\n", __FUNCTION__, dev->name, dev);
+                printk(KERN_INFO "%s: found [%s]:%p\n", 
+                                                __FUNCTION__, dev->name, dev);
                 dev = next_net_device(dev);
         }
         read_unlock(&dev_base_lock);
@@ -553,7 +532,8 @@ static int net_namespace_list_print(const nlmsg_t *msg) {
         printk(KERN_DEBUG "%s: locked\n", __FUNCTION__);
         for_each_net(net) {
                 for_each_netdev(net, dev) {
-                        printk(KERN_DEBUG "%s: dev %s : i = %d, %p, ns %p\n", __FUNCTION__, dev->name, dev->ifindex, dev, net);
+                        printk(KERN_DEBUG "%s: dev %s : i = %d, %p, ns %p\n", 
+                                __FUNCTION__, dev->name, dev->ifindex, dev, net);
                 }
         }
         rtnl_unlock();
@@ -594,7 +574,8 @@ static inline void vlan_group_set_device(struct vlan_group *vg,
 }
 
 static void printk_vlan_group(const struct vlan_group *vlan_group) {
-        printk(KERN_DEBUG "%s: nr_vlan_devs: %u\n", __FUNCTION__, vlan_group->nr_vlan_devs);
+        printk(KERN_DEBUG "%s: nr_vlan_devs: %u\n", 
+                           __FUNCTION__, vlan_group->nr_vlan_devs);
         u16 i, j;
 
         for (i = 0; i < VLAN_PROTO_NUM; ++i) {
@@ -608,9 +589,12 @@ static void printk_vlan_group(const struct vlan_group *vlan_group) {
 }
 
 static void printk_vlan_info(const struct vlan_info *vlan_info) {
-        printk(KERN_DEBUG "%s: net_device: %p\n", __FUNCTION__, vlan_info->real_dev);
-        printk(KERN_DEBUG "%s: nr_vids: %u\n", __FUNCTION__, vlan_info->nr_vids);
-        printk(KERN_DEBUG "%s: grp: %p\n", __FUNCTION__, &vlan_info->grp);
+        printk(KERN_DEBUG "%s: net_device: %p\n", 
+                          __FUNCTION__, vlan_info->real_dev);
+        printk(KERN_DEBUG "%s: nr_vids: %u\n", 
+                          __FUNCTION__, vlan_info->nr_vids);
+        printk(KERN_DEBUG "%s: grp: %p\n", 
+                          __FUNCTION__, &vlan_info->grp);
         printk_vlan_group(&vlan_info->grp);
 }
 
@@ -625,7 +609,8 @@ static int show_vlan_info(const nlmsg_t *msg) {
         struct vlan_dev_priv *vlan = vlan_dev_priv(vlan_dev);
         real_dev = vlan->real_dev;
 
-        printk(KERN_DEBUG "%s: find parent: %s by addr %p\n", __FUNCTION__, real_dev->name, real_dev);
+        printk(KERN_DEBUG "%s: find parent: %s by addr %p\n", 
+                                __FUNCTION__, real_dev->name, real_dev);
 
         rtnl_lock();
         struct vlan_info *vlan_info = rcu_dereference_rtnl(real_dev->vlan_info);
