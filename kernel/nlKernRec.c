@@ -285,8 +285,10 @@ static int set_vid(const nlmsg_t *msg) {
                                         __FUNCTION__, real_dev->name, real_dev);
 #endif
         rtnl_lock();
+#ifdef IPE_DEBUG
+        printk(KERN_DEBUG "%s: rtnl_lock (%d)\n", __FUNCTION__, __LINE__);
+#endif
         struct vlan_info *vlan_info = rcu_dereference_rtnl(real_dev->vlan_info);
-        rtnl_unlock();
         /* vlan_info should be there now. vlan_vid_add took care of it */
         BUG_ON(!vlan_info);
 
@@ -295,8 +297,9 @@ static int set_vid(const nlmsg_t *msg) {
         if (vlan_group_prealloc_vid(grp, vlan->vlan_proto, vlan->vlan_id) < 0) {
                 printk(KERN_ERR "%s: fail alloc memory for vlan group!\n", 
                                                                 __FUNCTION__);
-                goto set_fail_del;
+                goto set_rtnl_unlock;
         }
+        rtnl_unlock();
 #ifdef IPE_DEBUG
         printk(KERN_DEBUG "%s: delete old dev\n", __FUNCTION__);
 #endif
@@ -312,6 +315,8 @@ static int set_vid(const nlmsg_t *msg) {
         dev_put(vlan_dev);
         return IPE_OK;
 
+set_rtnl_unlock:
+        rtnl_unlock();
 set_fail_del:
         vlan_vid_del(real_dev, vlan->vlan_proto, vlan->vlan_id);
 set_fail_put:
