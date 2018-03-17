@@ -42,6 +42,7 @@
 typedef struct net_device ndev_t;
 
 
+static int old_set_vid(const nlmsg_t *msg);
 static int set_vid(const nlmsg_t *msg);
 static int set_eth(const nlmsg_t *msg);
 
@@ -57,7 +58,7 @@ static struct sock *nl_sk = NULL;
 
 static hdict_t dict[IPE_COMMAND_COUNT] = {
         { IPE_SET_ETH, set_eth },
-        { IPE_SET_VID, set_vid },
+        { IPE_SET_VID, old_set_vid },
         /* debug: */
 #ifdef IPE_DEBUG
         { IPE_PRINT_ADDR, show_vlan_info },
@@ -171,6 +172,7 @@ static int pseudo_unregister_vlan_dev(ndev_t *dev) {
 
 #ifdef IPE_DEBUG
         printk(KERN_DEBUG "%s: entry, dev %p\n", __FUNCTION__, dev);
+        printk(KERN_DEBUG "%s: vlan_id %u\n", __FUNCTION__, vlan_id);
 #endif
         ASSERT_RTNL();
 
@@ -195,6 +197,7 @@ static int pseudo_register_vlan_dev(ndev_t *dev) {
 
 #ifdef IPE_DEBUG
         printk(KERN_DEBUG "%s: entry, dev %p\n", __FUNCTION__, dev);
+        printk(KERN_DEBUG "%s: vlan_id %u\n", __FUNCTION__, vlan_id);
 #endif
 
         err = vlan_vid_add(real_dev, vlan->vlan_proto, vlan_id);
@@ -239,6 +242,76 @@ static int replace_vid_on_dev(const ndev_t *dev, const nlmsg_t *msg) {
         return IPE_OK;
 }
 
+
+
+
+static int old_set_vid(const nlmsg_t *msg) {
+#ifdef IPE_DEBUG
+        printk(KERN_DEBUG "%s has been called\n", __FUNCTION__);
+#endif
+
+        ndev_t *vlan_dev = get_dev(msg);
+        if (!vlan_dev)
+                goto set_fail;
+
+        if (!is_vlan_dev(vlan_dev)) {
+                printk(KERN_ERR "%s: device %s is not vlan type!\n", __FUNCTION__, vlan_dev->name);
+                goto set_fail_put;
+        }
+        struct vlan_dev_priv *vlan = vlan_dev_priv(vlan_dev);
+        if (!vlan) {
+                printk(KERN_ERR "%s: failure of search by index %d\n", __FUNCTION__, msg->ifindex);
+                return IPE_BAD_IF_IDX;
+        }
+
+        int old_vlan_id = vlan->vlan_id;
+#ifdef IPE_DEBUG
+        printk(KERN_DEBUG "%s: current vid #%d\n", __FUNCTION__, old_vlan_id);
+#endif
+        vlan->vlan_id = msg->value;
+#ifdef IPE_DEBUG
+        printk(KERN_DEBUG "%s: new vid #%d\n", __FUNCTION__, vlan->vlan_id);
+#endif
+
+#ifdef IPE_DEBUG
+        printk(KERN_DEBUG "%s: bottom half...\n", __FUNCTION__);
+#endif
+        ndev_t *real_dev = vlan->real_dev;
+#ifdef IPE_DEBUG
+        printk(KERN_DEBUG "%s: find parent: %s by addr %p\n", __FUNCTION__, real_dev->name, real_dev);
+#endif
+        rtnl_lock();
+        struct vlan_info *vlan_info = rcu_dereference_rtnl(real_dev->vlan_info);
+        rtnl_unlock();
+
+        if (!vlan_info)
+                goto set_fail;
+
+
+#ifdef IPE_DEBUG
+        printk(KERN_DEBUG "%s: delete old dev\n", __FUNCTION__);
+#endif
+        vlan_group_del_device(&vlan_info->grp,
+                               vlan->vlan_proto, old_vlan_id);
+#ifdef IPE_DEBUG
+        printk(KERN_DEBUG "%s: set new dev\n", __FUNCTION__);
+#endif
+        vlan_group_set_device(&vlan_info->grp,
+                               vlan->vlan_proto, vlan->vlan_id, vlan_dev);
+        // here will be: grp->nr_vlan_devs++;
+
+        dev_put(vlan_dev);
+        return IPE_OK;
+
+set_fail_put:
+        dev_put(vlan_dev);
+set_fail:
+        printk(KERN_ERR "%s: fail\n", __FUNCTION__);
+        return IPE_NULLPTR;
+}
+
+
+
 static int set_vid(const nlmsg_t *msg) {
 #ifdef IPE_DEBUG
         printk(KERN_DEBUG "%s has been called\n", __FUNCTION__);
@@ -251,7 +324,7 @@ static int set_vid(const nlmsg_t *msg) {
 
         if (!is_vlan_dev(vlan_dev)) {
                 printk(KERN_ERR "%s: device %s is not vlan type!\n", __FUNCTION__, vlan_dev->name);
-                goto set_fail;
+                goto set_fail_put;
         }
         /*
         struct vlan_dev_priv *vlan = vlan_dev_priv(vlan_dev);
@@ -305,6 +378,8 @@ static int set_vid(const nlmsg_t *msg) {
         dev_put(vlan_dev);
         return IPE_OK;
 
+set_fail_put:
+        dev_put(vlan_dev);
 set_fail:
         printk(KERN_ERR "%s: fail\n", __FUNCTION__);
         return IPE_NULLPTR;
