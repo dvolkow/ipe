@@ -168,6 +168,10 @@ static void sending(nmsgh_t *nlh, struct msghdr *msgh) {
 static void show_usage(void) {
         printf("Usage: ipe dev IFINDEX [ netns NETNS ] id  [ VID ]\n");
         printf("                                       eth [ ETH_TYPE ]\n");
+        printf("where ETH_TYPE := { 33024 for 0x8100 aka 802.1Q          |\n");
+        printf("                    34984 for 0x88A8 aka 802.1ad         |\n");
+        printf("                    37120 for 0x9100 aka deprecated QinQ |\n");
+        printf("                    37376 for 0x9200 aka deprecated QinQ }\n");
 }
 
 

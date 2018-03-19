@@ -258,14 +258,14 @@ static int set_eth(const nlmsg_t *msg) {
 
         ndev_t *vlan_dev = get_dev(msg);
         if (!vlan_dev) {
-                printk(KERN_WARNING "%s: fail search device #%d info net_namespace [%d]\n",
+                printk(KERN_WARNING "%s: fail search device #%d into net_namespace [%d]\n",
                                                 __FUNCTION__, msg->ifindex, msg->nsfd);
                 goto set_fail;
         }
 
         if (vlan_proto_idx(htons(msg->value)) == IPE_BAD_VLAN_PROTO) {
                 printk(KERN_WARNING "%s: try set bad VLAN ethertype: %x\n",
-                                                __FUNCTION__, msg->value);
+                                                __FUNCTION__, htons(msg->value));
                 goto set_fail;
         }
 
