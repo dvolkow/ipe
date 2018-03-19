@@ -1,3 +1,5 @@
 #! /bin/bash
 
-ln -s ./ipe /usr/bin/ipe 
+DIR=`pwd`
+
+ln -s $DIR/ipe /usr/bin/ipe 
