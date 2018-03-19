@@ -9,7 +9,7 @@ PARENT="enp3s0"
 
 VIDS=('100' '101' '42')
 PARENTS=($PARENT $PARENT $DEF_PREFIX"1")
-IPS=('2.2.2.2/24' '2.2.2.3/24' '2.2.2.4/24')
+IPS=('2.2.2.2/24' '2.2.3.3/24' '2.2.4.4/24')
 
 function set_IP {
         sudo ip addr add ${IP_PARENT} dev ${PARENT}
