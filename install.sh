@@ -1,3 +1,3 @@
 #! /bin/bash
 
-ln -s /usr/bin/ipe ./ipe
+ln -s ./ipe /usr/bin/ipe 
