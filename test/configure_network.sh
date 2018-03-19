@@ -1,27 +1,29 @@
 #! /bin/bash
 set -x
 
+COUNT=2
+DEF_PREFIX="vlan"
+
 IP_PARENT='10.10.13.55/24'
-IP_CHILD1='2.2.2.2/24'
-IP_CHILD2='2.2.2.3/24'
-IP_CHILD3='2.2.2.4/24'
 PARENT="enp3s0"
-CHILD1="vlan1"
-CHILD2="vlan2"
-CHILD3="vlan3"
-VID1=100
-VID2=101
-VID3=42
 
-ip addr add ${IP_PARENT} dev ${PARENT}
+VIDS=('100' '101' '42')
+PARENTS=($PARENT $PARENT $DEF_PREFIX"1")
+IPS=('2.2.2.2/24' '2.2.2.3/24' '2.2.2.4/24')
 
-ip link add link ${PARENT} name ${CHILD1} 'type' vlan id ${VID1}
-ip link add link ${PARENT} name ${CHILD2} 'type' vlan id ${VID2}
-ip addr add ${IP_CHILD1} dev ${CHILD1}
-ip addr add ${IP_CHILD2} dev ${CHILD2}
-ip link 'set' ${CHILD1} 'up'
-ip link 'set' ${CHILD2} 'up'
+function set_IP {
+        ip addr add ${IP_PARENT} dev ${PARENT}
+}
 
-ip link add link ${CHILD1} name ${CHILD3} 'type' vlan id ${VID3}
-ip addr add ${IP_CHILD3} dev ${CHILD3}
-ip link 'set' ${CHILD3} 'up'
+function add_links {
+        for i in `seq 0 $COUNT`;
+        do
+                ip link add link ${PARENTS[$i]} name ${DEF_PREFIX}${i} 'type' vlan id ${VIDS[$i]}
+                ip addr add ${IPS[$i]} dev ${DEF_PREFIX}${i}
+                ip link 'set' ${DEF_PREFIX}${i} 'up'
+
+        done
+}
+
+
+add_links
