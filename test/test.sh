@@ -48,14 +48,17 @@ function rmmod_ipe() {
 
 if [[ $1 == "make" ]]; then
         make_all
+        exit
 fi
 
 if [[ $1 == "create_vrf" ]]; then
         create_vrf
+        exit
 fi
 
 if [[ $1 == "ins" ]]; then
         insmod_ipe
+        exit
 fi
 
 if [[ $1 == "run" ]]; then
@@ -64,12 +67,15 @@ if [[ $1 == "run" ]]; then
         echo $IFINDEX
 #        ../ipe dev ${IFINDEX} netns ${VRF_NAME} id ${NEW_VID}
         ../ipe dev ${IFINDEX} id ${NEW_VID}
+        exit
 fi
 
 if [[ $1 == "rmmod" ]]; then
         rmmod_ipe
+        exit
 fi
 
 if [[ $1 == "delete_vrf" ]]; then
         delete_vrf
+        exit
 fi
