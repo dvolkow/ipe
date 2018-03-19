@@ -30,12 +30,12 @@
 #include <string.h>
 #include <stdio.h>
 
-#include "../include/nl.h"
+#include "../include/ipe.h"
 
-#define MAX_PAYLOAD 1024 /* maximum payload size*/
+#define MAX_PAYLOAD 1024  /* maximum payload size*/
 
 #define NEXT_ARG(args, argv) (argv++, args--)
-#define CHECK_ARGS(args) (args - 1 > 0)
+#define CHECK_ARGS(args)     (args - 1 > 0)
 
 
 typedef struct nlmsghdr nmsgh_t;
@@ -66,9 +66,10 @@ struct msghdr msg;
 
 
 static void prepare(void) {
-#ifdef IPE_DEBUG
-        printf("%s: entry\n", __FUNCTION__);
-#endif
+        #ifdef IPE_DEBUG
+                printf("%s: entry\n", __FUNCTION__);
+        #endif
+
         memset(&src_addr, 0, sizeof(src_addr));
         src_addr.nl_family = AF_NETLINK;
 
@@ -101,9 +102,9 @@ static int get_netns_fd(const char *name)
 
 
 static void create_msg(nmsgh_t *nlh) {
-#ifdef IPE_DEBUG
-        printf("%s: entry\n", __FUNCTION__);
-#endif
+        #ifdef IPE_DEBUG
+                printf("%s: entry\n", __FUNCTION__);
+        #endif
 
         nlmsg_t msgs = {
                 .value = g_arg.value,
@@ -115,24 +116,29 @@ static void create_msg(nmsgh_t *nlh) {
                 msgs.command = IPE_SET_VID;
         else if (!strcmp(g_arg.ctype, "eth"))
                 msgs.command = IPE_SET_ETH;
-        else if (!strcmp(g_arg.ctype, "parent"))
-                msgs.command = IPE_PRINT_ADDR;
 
-#ifdef IPE_DEBUG
-        printf("%s: memcpy %lu to %s\n", __FUNCTION__, sizeof(msgs), (char *)nlh);
-#endif
+        #ifdef IPE_DEBUG
+                else if (!strcmp(g_arg.ctype, "parent"))
+                        msgs.command = IPE_PRINT_ADDR;
+
+                printf("%s: memcpy %lu to %s\n", 
+                                __FUNCTION__, sizeof(msgs), (char *)nlh);
+        #endif
+
         memcpy(NLMSG_DATA(nlh), &msgs, sizeof(msgs));
-#ifdef IPE_DEBUG
-        printf("%s: ret\n", __FUNCTION__);
-#endif
+
+        #ifdef IPE_DEBUG
+                printf("%s: ret\n", __FUNCTION__);
+        #endif
 }
 
 
 
 static void sending(nmsgh_t *nlh, struct msghdr *msgh) {
-#ifdef IPE_DEBUG
-        printf("%s: entry\n", __FUNCTION__);
-#endif
+        #ifdef IPE_DEBUG
+                printf("%s: entry\n", __FUNCTION__);
+        #endif
+
         struct iovec iov;
         nlh = (struct nlmsghdr *)malloc(NLMSG_SPACE(MAX_PAYLOAD));
         memset(nlh, 0, NLMSG_SPACE(MAX_PAYLOAD));
@@ -150,9 +156,10 @@ static void sending(nmsgh_t *nlh, struct msghdr *msgh) {
         msg.msg_iov     = &iov;
         msg.msg_iovlen  = 1;
 
-#ifdef IPE_DEBUG
-        printf("Sending message to kernel\n");
-#endif
+        #ifdef IPE_DEBUG
+                printf("Sending message to kernel\n");
+        #endif
+
         sendmsg(sock_fd,&msg,0);
 }
 
@@ -181,9 +188,10 @@ static int parse_arg(int args, char **argv) {
                         if (CHECK_ARGS(args)) {
                                 NEXT_ARG(args, argv);
                                 g_arg.ifindex = atoi(*argv);
-#ifdef IPE_DEBUG
-                                printf("%s: get index %d\n", __FUNCTION__, g_arg.ifindex);
-#endif
+                                #ifdef IPE_DEBUG
+                                        printf("%s: get index %d\n", 
+                                                        __FUNCTION__, g_arg.ifindex);
+                                #endif
                         } else {
                                 goto usage_ret;
                         }
@@ -191,9 +199,10 @@ static int parse_arg(int args, char **argv) {
                         if (CHECK_ARGS(args)) {
                                 NEXT_ARG(args, argv);
                                 g_arg.net = *argv;
-#ifdef IPE_DEBUG
-                                printf("%s: get net %s\n", __FUNCTION__, g_arg.net);
-#endif
+                                #ifdef IPE_DEBUG
+                                        printf("%s: get net %s\n", 
+                                                           __FUNCTION__, g_arg.net);
+                                #endif
                         } else {
                                 goto usage_ret;
                         }
@@ -202,9 +211,10 @@ static int parse_arg(int args, char **argv) {
                         if (CHECK_ARGS(args)) {
                                 NEXT_ARG(args, argv);
                                 g_arg.value = atoi(*argv);
-#ifdef IPE_DEBUG
-                                printf("%s: get command set vid %d\n", __FUNCTION__, g_arg.value);
-#endif
+                                #ifdef IPE_DEBUG
+                                        printf("%s: get command set vid %d\n", 
+                                                        __FUNCTION__, g_arg.value);
+                                #endif
                                 goto ret_ok;
                         } else {
                                 goto usage_ret;
@@ -214,9 +224,10 @@ static int parse_arg(int args, char **argv) {
                         if (CHECK_ARGS(args)) {
                                 NEXT_ARG(args, argv);
                                 g_arg.value = atoi(*argv);
-#ifdef IPE_DEBUG
-                                printf("%s: get command set eth_type %d\n", __FUNCTION__, g_arg.value);
-#endif
+                                #ifdef IPE_DEBUG
+                                        printf("%s: get command set eth_type %d\n", 
+                                                        __FUNCTION__, g_arg.value);
+                                #endif
                                 goto ret_ok;
                         } else {
                                 goto usage_ret;
@@ -249,16 +260,18 @@ int main(int args, char **argv)
 
         struct nlmsghdr *nlh;
 
-#ifdef IPE_DEBUG
-        printf("%s: start, name = %s\n", __FUNCTION__, name);
-#endif
+        #ifdef IPE_DEBUG
+                printf("%s: start, name = %s\n", __FUNCTION__, name);
+        #endif
 
         sock_fd = socket(PF_NETLINK, SOCK_RAW, NETLINK_USER);
 
         if (sock_fd < 0)
-                return -1;
+                return IPE_BAD_SOC;
 
         prepare();
         sending(nlh, &msg);
         close(sock_fd);
+
+        return IPE_OK;
 }

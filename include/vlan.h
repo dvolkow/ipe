@@ -9,15 +9,11 @@
 *
 * 
 *
-* Author:
-*   March, 2018        Daniel Wolkow            
 *
 *
 * Description:
-*     This extends the capabilities of network utilities (such as iproute2). 
-* The initial motivation for this was the possibility of changing the vlan_id 
-* and vlan_proto "on the spot," without having to remove the network interfaces 
-*
+*   This little modify of net/8021q/vlan_core functions  
+*     
 ******************************************************************************/
 
 #ifndef __IPE_VLAN_H
@@ -34,9 +30,14 @@
 #define VLAN_GROUP_ARRAY_SPLIT_PARTS  8
 #define VLAN_GROUP_ARRAY_PART_LEN     (VLAN_N_VID/VLAN_GROUP_ARRAY_SPLIT_PARTS)
 
+#define IPE_BAD_VLAN_PROTO            (-42)
+
 enum vlan_protos {
 	VLAN_PROTO_8021Q	= 0,
 	VLAN_PROTO_8021AD,
+        VLAN_PROTO_QINQ1,
+        VLAN_PROTO_QINQ2,
+        VLAN_PROTO_QINQ3,
 	VLAN_PROTO_NUM,
 };
 
@@ -57,27 +58,32 @@ struct vlan_info {
 	struct rcu_head		rcu;
 };
 
-static inline unsigned int vlan_proto_idx(__be16 proto)
+static inline unsigned int vlan_proto_idx(__be16 proto) 
 {
         switch (proto) {
         case htons(ETH_P_8021Q):
                 return VLAN_PROTO_8021Q;
         case htons(ETH_P_8021AD):
                 return VLAN_PROTO_8021AD;
+        case htons(ETH_P_QINQ1):
+                return VLAN_PROTO_QINQ1;
+        case htons(ETH_P_QINQ2):
+                return VLAN_PROTO_QINQ2;
+        case htons(ETH_P_QINQ3):
+                return VLAN_PROTO_QINQ3;
         default:
-#ifdef IPE_DEBUG
-                printk(KERN_ERR "%s: incorrect vlan protocol %x!\n", 
+                #ifdef IPE_DEBUG
+                        printk(KERN_ERR "%s: incorrect vlan protocol %x!\n", 
                                                  __FUNCTION__, proto);
-#endif
-//		BUG();
-                return 0;
+                #endif
+                return IPE_BAD_VLAN_PROTO;
         }
 }
 
 
 static inline void vlan_group_set_device(struct vlan_group *vg,
 					 __be16 vlan_proto, u16 vlan_id,
-					 struct net_device *dev)
+					 struct net_device *dev) 
 {
 	struct net_device **array;
 	if (!vg)
@@ -109,12 +115,13 @@ static int vlan_group_prealloc_vid(struct vlan_group *vg,
         if (array != NULL)
                 return 0;
 
-        size = sizeof(struct net_device *) * VLAN_GROUP_ARRAY_PART_LEN;
+        size  = sizeof(struct net_device *) * VLAN_GROUP_ARRAY_PART_LEN;
         array = kzalloc(size, GFP_KERNEL);
         if (array == NULL)
                 return -ENOBUFS;
 
         vg->vlan_devices_arrays[pidx][vidx] = array;
+
         return 0;
 }
 

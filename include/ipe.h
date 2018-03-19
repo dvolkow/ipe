@@ -21,11 +21,12 @@
 ******************************************************************************/
 
 #ifndef __IPE_IPE_H
-#define __IPE_IPE_H 1
+#define __IPE_IPE_H              1
+
 
 #define IPE_ARGS_COUNT           3
 
-#define NETLINK_USER            31
+#define NETLINK_USER            31 /* this port than used kernel module */
 #define MAX_PATH_LEN            256
 #define NETNS_RUN_DIR           "/var/run/netns"
 
@@ -50,8 +51,10 @@ typedef struct {
 enum {
         IPE_SET_VID    = 0,
         IPE_SET_ETH    = 1, 
+#ifdef IPE_DEBUG
         /* debug: */
         IPE_PRINT_ADDR = 2,
+#endif
 };
 
 
@@ -71,7 +74,7 @@ enum {
 
 
 /* Invalid descriptor for case global netns */
-const int IPE_GLOBAL_NS  = -1;
+#define IPE_GLOBAL_NS   (-1)
 
 
 /* Error's code: */
@@ -85,6 +88,8 @@ enum {
         IPE_FAIL_CR_SOC    = 6,
         IPE_FEW_ARG        = 7,
         IPE_NULLPTR        = 8,
+        IPE_BAD_SOC        = 9,
+        IPE_DEFAULT_FAIL   = 42,
 };
 
 #endif // __IPE_IPE_H

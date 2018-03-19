@@ -2,6 +2,7 @@
 set -e
 set -x
 
+MODNAME="ipe.ko"
 VRF_NAME="vrf_test"
 IF_NAME="vlan1"
 PARENT="enp3s0"
@@ -38,11 +39,11 @@ function delete_vrf() {
 }
 
 function insmod_ipe() {
-        insmod ../kernel/nlKernRec.ko
+        insmod ../kernel/${MODNAME}
 }
 
 function rmmod_ipe() {
-        rmmod nlKernRec.ko
+        rmmod ${MODNAME}
 }
 
 if [[ $1 == "make" ]]; then
