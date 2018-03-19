@@ -1,11 +1,12 @@
 #! /bin/bash
 set -x
 
-PARENT="enp3s0"
-CHILD="vlan1"
+COUNT=2
+UPPER="vlan3"
 
-ip link 'set' ${CHILD} 'down'
-ip link delete ${CHILD}
-CHILD="vlan2"
-ip link 'set' ${CHILD} 'down'
-ip link delete ${CHILD}
+ip link delete ${UPPER}
+
+for i in `seq 1 $COUNT`;
+do 
+        ip link delete "vlan"${i}
+done

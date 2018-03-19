@@ -4,11 +4,14 @@ set -x
 IP_PARENT='10.10.13.55/24'
 IP_CHILD1='2.2.2.2/24'
 IP_CHILD2='2.2.2.3/24'
+IP_CHILD3='2.2.2.4/24'
 PARENT="enp3s0"
 CHILD1="vlan1"
 CHILD2="vlan2"
+CHILD3="vlan3"
 VID1=100
 VID2=101
+VID3=42
 
 ip addr add ${IP_PARENT} dev ${PARENT}
 
@@ -18,3 +21,7 @@ ip addr add ${IP_CHILD1} dev ${CHILD1}
 ip addr add ${IP_CHILD2} dev ${CHILD2}
 ip link 'set' ${CHILD1} 'up'
 ip link 'set' ${CHILD2} 'up'
+
+ip link add link ${CHILD1} name ${CHILD3} 'type' vlan id ${VID3}
+ip addr add ${IP_CHILD3} dev ${CHILD3}
+ip link 'set' ${CHILD3} 'up'
