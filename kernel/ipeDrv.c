@@ -124,6 +124,7 @@ unlock_fail:
 
 /*
  * Fetch find case in dependency of type namespace (defaulf/custom)
+ * ATTENTION! Here called "dev_hold" function!
  */
 ndev_t *get_dev(const nlmsg_t *msg) {
         if (msg->nsfd == IPE_GLOBAL_NS) {
@@ -167,7 +168,7 @@ static int set_vid(const nlmsg_t *msg) {
 
         if (msg->value > VLAN_N_VID || msg->value < 0) {
                 printk(KERN_WARNING "%s: try set bad VID %d\n", __FUNCTION__, msg->value);
-                goto set_fail;
+                goto set_fail_put;
         }
 
         if (!is_vlan_dev(vlan_dev)) {
@@ -187,8 +188,10 @@ static int set_vid(const nlmsg_t *msg) {
         int old_vlan_id  = vlan->vlan_id;
         ndev_t *real_dev = vlan->real_dev;
 
+        /*
         if (vlan_vid_add(real_dev, vlan->vlan_proto, msg->value))
                 goto set_rtnl_unlock;
+        */
 
         #ifdef IPE_DEBUG
                 printk(KERN_DEBUG "%s: current vid #%d\n", 
@@ -266,7 +269,7 @@ static int set_eth(const nlmsg_t *msg) {
         if (vlan_proto_idx(htons(msg->value)) == IPE_BAD_VLAN_PROTO) {
                 printk(KERN_WARNING "%s: try set bad VLAN ethertype: %x\n",
                                                 __FUNCTION__, htons(msg->value));
-                goto set_fail;
+                goto set_fail_put;
         }
 
         if (!is_vlan_dev(vlan_dev)) {
@@ -286,8 +289,10 @@ static int set_eth(const nlmsg_t *msg) {
         __be16 old_vlan_proto = vlan->vlan_proto;
         ndev_t *real_dev = vlan->real_dev;
 
+        /*
         if (vlan_vid_add(real_dev, htons(msg->value), vlan->vlan_id))
                 goto set_rtnl_unlock;
+        */
 
         #ifdef IPE_DEBUG
                 printk(KERN_DEBUG "%s: current proto #%x\n", 
