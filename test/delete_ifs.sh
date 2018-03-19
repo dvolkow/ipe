@@ -3,7 +3,7 @@ set -x
 
 
 COUNT=2
-UPPER="vlan3"
+UPPER="vlan2"
 
 sudo ip link delete ${UPPER}
 
