@@ -29,6 +29,7 @@
 #define NETLINK_USER            31 /* this port than used kernel module */
 #define MAX_PATH_LEN            256
 #define NETNS_RUN_DIR           "/var/run/netns"
+#define IPE_BUFF_SIZE           128
 
 
 /* This structure for Netlink message into ipe */
@@ -43,8 +44,16 @@ typedef struct nl_message {
 /* For map handlers */
 typedef struct {
         int (*handler)(const nlmsg_t *msg);
+        char *name;
 } ipe_tool;
 
+
+
+typedef struct {
+        int     retcode;
+        char    report[IPE_BUFF_SIZE];
+        int     reserve;
+} ipe_answer;
 
 /* Functions that extend usage netlink */
 enum {
@@ -82,6 +91,7 @@ enum {
         IPE_FEW_ARG,
         IPE_NULLPTR,
         IPE_BAD_SOC,
+        IPE_BAD_ALLOC,
         IPE_DEFAULT_FAIL,
 };
 

@@ -62,6 +62,7 @@ static ipe_arg_t g_arg = {
 int sock_fd;
 struct sockaddr_nl src_addr, dest_addr;
 struct msghdr msg;
+nmsgh_t *nlh; 
 
 
 
@@ -101,7 +102,7 @@ static int get_netns_fd(const char *name)
 
 
 
-static void create_msg(nmsgh_t *nlh) {
+static void create_msg() {
         #ifdef IPE_DEBUG
                 printf("%s: entry\n", __FUNCTION__);
         #endif
@@ -134,7 +135,7 @@ static void create_msg(nmsgh_t *nlh) {
 
 
 
-static void sending(nmsgh_t *nlh, struct msghdr *msgh) {
+static void sending(struct msghdr *msgh) {
         #ifdef IPE_DEBUG
                 printf("%s: entry\n", __FUNCTION__);
         #endif
@@ -144,6 +145,7 @@ static void sending(nmsgh_t *nlh, struct msghdr *msgh) {
         memset(nlh, 0, NLMSG_SPACE(MAX_PAYLOAD));
 
         nlh->nlmsg_len   = NLMSG_SPACE(MAX_PAYLOAD);
+        nlh->nlmsg_pid   = getpid();
         nlh->nlmsg_flags = 0;
 
         create_msg(nlh);
@@ -197,7 +199,7 @@ static int parse_arg(int args, char **argv) {
                                 g_arg.ifindex = atoi(*argv);
                                 #ifdef IPE_DEBUG
                                         printf("%s: get index %d\n", 
-                                                        __FUNCTION__, g_arg.ifindex);
+                                                 __FUNCTION__, g_arg.ifindex);
                                 #endif
                         } else {
                                 goto usage_ret;
@@ -208,7 +210,7 @@ static int parse_arg(int args, char **argv) {
                                 g_arg.net = *argv;
                                 #ifdef IPE_DEBUG
                                         printf("%s: get net %s\n", 
-                                                           __FUNCTION__, g_arg.net);
+                                                 __FUNCTION__, g_arg.net);
                                 #endif
                         } else {
                                 goto usage_ret;
@@ -220,7 +222,7 @@ static int parse_arg(int args, char **argv) {
                                 g_arg.value = atoi(*argv);
                                 #ifdef IPE_DEBUG
                                         printf("%s: get command set vid %d\n", 
-                                                        __FUNCTION__, g_arg.value);
+                                                 __FUNCTION__, g_arg.value);
                                 #endif
                                 goto ret_ok;
                         } else {
@@ -233,7 +235,7 @@ static int parse_arg(int args, char **argv) {
                                 g_arg.value = atoi(*argv);
                                 #ifdef IPE_DEBUG
                                         printf("%s: get command set eth_type %d\n", 
-                                                        __FUNCTION__, g_arg.value);
+                                                 __FUNCTION__, g_arg.value);
                                 #endif
                                 goto ret_ok;
                         } else {
@@ -243,7 +245,8 @@ static int parse_arg(int args, char **argv) {
                         g_arg.ctype = *argv;
                         goto ret_ok;
                 } else {
-                        printf("%s: arg \"%s\" not matches\n", __FUNCTION__, *argv);
+                        printf("%s: arg \"%s\" not matches\n", 
+                                                        __FUNCTION__, *argv);
                         goto usage_ret;
                 }
         }
@@ -260,16 +263,12 @@ ret_ok:
 
 int main(int args, char **argv)
 {
+        ipe_answer answer;
         int res = parse_arg(args, argv);
         if (res) {
                 return res;
         }
 
-        struct nlmsghdr *nlh;
-
-        #ifdef IPE_DEBUG
-                printf("%s: start, name = %s\n", __FUNCTION__, name);
-        #endif
 
         sock_fd = socket(PF_NETLINK, SOCK_RAW, NETLINK_USER);
 
@@ -277,8 +276,15 @@ int main(int args, char **argv)
                 return IPE_BAD_SOC;
 
         prepare();
-        sending(nlh, &msg);
+        sending(&msg);
+
+        recvmsg(sock_fd, &msg, 0);
+        memcpy(&answer, NLMSG_DATA(nlh), sizeof(answer));
+
+        printf("%s", answer.report);
+
+        free(nlh);
         close(sock_fd);
 
-        return IPE_OK;
+        return answer.retcode;
 }
