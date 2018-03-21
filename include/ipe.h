@@ -42,9 +42,8 @@ typedef struct nl_message {
 
 /* For map handlers */
 typedef struct {
-        const char command;
         int (*handler)(const nlmsg_t *msg);
-} hdict_t;
+} ipe_tool;
 
 
 /* Functions that extend usage netlink */
@@ -55,14 +54,8 @@ enum {
         /* debug: */
         IPE_PRINT_ADDR = 2,
 #endif
+        IPE_COMMAND_COUNT,
 };
-
-
-#ifdef IPE_DEBUG
-        #define IPE_COMMAND_COUNT        3 // one debug func extended
-#else
-        #define IPE_COMMAND_COUNT        2
-#endif
 
 
 #ifdef IPE_DEBUG
@@ -80,16 +73,16 @@ enum {
 /* Error's code: */
 enum {
         IPE_OK             = 0,
-        IPE_BAD_ARG        = 1,
-        IPE_BAD_VID        = 2,
-        IPE_BAD_IF_IDX     = 3,
-        IPE_UNKNOWN_ACTION = 4,
-        IPE_FAIL_NS        = 5,
-        IPE_FAIL_CR_SOC    = 6,
-        IPE_FEW_ARG        = 7,
-        IPE_NULLPTR        = 8,
-        IPE_BAD_SOC        = 9,
-        IPE_DEFAULT_FAIL   = 42,
+        IPE_BAD_ARG,
+        IPE_BAD_VID,
+        IPE_BAD_IF_IDX,
+        IPE_UNKNOWN_COMMAND,
+        IPE_FAIL_NS,
+        IPE_FAIL_CR_SOC,
+        IPE_FEW_ARG,
+        IPE_NULLPTR,
+        IPE_BAD_SOC,
+        IPE_DEFAULT_FAIL,
 };
 
 #endif // __IPE_IPE_H

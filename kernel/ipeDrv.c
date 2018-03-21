@@ -49,12 +49,12 @@ static int set_eth(const nlmsg_t *msg);
 
 static struct sock *nl_sk = NULL;
 
-static hdict_t dict[IPE_COMMAND_COUNT] = {
-        { IPE_SET_VID, set_vid },
-        { IPE_SET_ETH, set_eth },
+static ipe_tool commap[IPE_COMMAND_COUNT] = {
+        {set_vid},
+        {set_eth},
         /* debug: */
         #ifdef IPE_DEBUG
-                { IPE_PRINT_ADDR, show_vlan_info },
+        {show_vlan_info},
         #endif
 };
 
@@ -62,29 +62,26 @@ static hdict_t dict[IPE_COMMAND_COUNT] = {
 
 
 
-/*
- * Fetch needed ops
- */
-static int action(const nlmsg_t *msg) {
-        int i;
-        for (i = 0; i < IPE_COMMAND_COUNT; ++i) {
-                if (dict[i].command == msg->command) {
-                        dict[i].handler(msg);
+static int fetch_and_exec(const nlmsg_t *msg) {
+        int command = msg->command;
 
-                        return IPE_OK;
-                }
+        if (command < 0 || command >= IPE_COMMAND_COUNT) {
+                printk(KERN_ERR "%s: bad command #%d!\n",
+                                        __FUNCTION__, command);
+                return IPE_UNKNOWN_COMMAND;
         }
 
-        return IPE_UNKNOWN_ACTION;
-}
+        commap[command].handler(msg);
 
+        return IPE_OK;
+}
 
 
 
 /*
  * Find device into custom namespace
  */
-static ndev_t *find_device(const nlmsg_t *msg) {
+static ndev_t *find_device_into_ns(const nlmsg_t *msg) {
         struct net    *net; // namespace
         ndev_t *dev;
 
@@ -140,7 +137,7 @@ ndev_t *get_dev(const nlmsg_t *msg) {
                                              __FUNCTION__, msg->nsfd);
                 #endif
 
-                return find_device(msg);
+                return find_device_into_ns(msg);
         }
 
         printk(KERN_ERR "%s: failure of search by index %d\n", 
@@ -168,6 +165,13 @@ static int set_vid(const nlmsg_t *msg) {
 
         if (msg->value > VLAN_N_VID || msg->value < 0) {
                 printk(KERN_WARNING "%s: try set bad VID %d\n", __FUNCTION__, msg->value);
+                goto set_fail_put;
+        }
+
+
+        if (msg->value == VLAN_N_VID || msg->value == 0) {
+                printk(KERN_WARNING "%s: this VID [%d] is reserved!\n", 
+                                        __FUNCTION__, msg->value);
                 goto set_fail_put;
         }
 
@@ -216,10 +220,6 @@ static int set_vid(const nlmsg_t *msg) {
                                                            __FUNCTION__, grp);
                 goto set_rtnl_unlock;
         }
-        #ifdef IPE_DEBUG
-                LOG_RTNL_UNLOCK();
-        #endif
-        rtnl_unlock();
 
         vlan_group_del_device(&vlan_info->grp,
                                vlan->vlan_proto, old_vlan_id);
@@ -227,16 +227,20 @@ static int set_vid(const nlmsg_t *msg) {
         vlan_group_set_device(&vlan_info->grp, vlan->vlan_proto, 
                                                        vlan->vlan_id, vlan_dev);
         // here will be: grp->nr_vlan_devs++;
+        #ifdef IPE_DEBUG
+                LOG_RTNL_UNLOCK();
+        #endif
+        rtnl_unlock();
         dev_put(vlan_dev);
 
         return IPE_OK;
 
 set_rtnl_unlock:
+        vlan_vid_del(real_dev, vlan->vlan_proto, vlan->vlan_id);
         #ifdef IPE_DEBUG
                 LOG_RTNL_UNLOCK();
         #endif
         rtnl_unlock();
-        vlan_vid_del(real_dev, vlan->vlan_proto, vlan->vlan_id);
 
 set_fail_put:
         dev_put(vlan_dev);
@@ -252,7 +256,8 @@ set_fail:
 
 
 /*
- * Tmp impl
+ * TODO: This functions are very similary, should be think about 
+ * refactoring. Moreover, they is very long
  */
 static int set_eth(const nlmsg_t *msg) {
         #ifdef IPE_DEBUG
@@ -317,14 +322,14 @@ static int set_eth(const nlmsg_t *msg) {
                                                            __FUNCTION__, grp);
                 goto set_rtnl_unlock;
         }
-        #ifdef IPE_DEBUG
-                LOG_RTNL_UNLOCK();
-        #endif
-        rtnl_unlock();
 
         vlan_group_del_device(&vlan_info->grp, old_vlan_proto, vlan->vlan_id);
         vlan_group_set_device(&vlan_info->grp, vlan->vlan_proto, 
                                                        vlan->vlan_id, vlan_dev);
+        #ifdef IPE_DEBUG
+                LOG_RTNL_UNLOCK();
+        #endif
+        rtnl_unlock();
 
         dev_put(vlan_dev);
         return IPE_OK;
@@ -363,13 +368,13 @@ static void vlan_ext_handler(struct sk_buff *skb) {
                 printk_msg(msg);
         #endif
 
-        if (action(msg)) 
-                printk(KERN_WARNING "%s: unknown action\n", __FUNCTION__);
+        if (fetch_and_exec(msg)) 
+                printk(KERN_WARNING "%s: unknown command!\n", __FUNCTION__);
 }
 
 
 
-static int __init hello_init(void) {
+static int __init ipe_init(void) {
 
         //This is for 3.6 kernels and above.
         struct netlink_kernel_cfg cfg = {
@@ -393,7 +398,7 @@ static int __init hello_init(void) {
 
 
 
-static void __exit hello_exit(void) {
+static void __exit ipe_exit(void) {
         #ifdef IPE_DEBUG
                 printk(KERN_INFO "%s: exiting %s\n", 
                                                __FUNCTION__, THIS_MODULE->name);
@@ -402,8 +407,8 @@ static void __exit hello_exit(void) {
 }
 
 
-module_init(hello_init); 
-module_exit(hello_exit);
+module_init(ipe_init); 
+module_exit(ipe_exit);
 
 MODULE_LICENSE( "GPL" );
 MODULE_VERSION( "0.1" );
