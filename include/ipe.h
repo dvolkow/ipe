@@ -29,6 +29,7 @@
 #define NETLINK_USER            31 /* this port than used kernel module */
 #define MAX_PATH_LEN            256
 #define NETNS_RUN_DIR           "/var/run/netns"
+#define IPE_BUFF_SIZE           128
 
 
 /* This structure for Netlink message into ipe */
@@ -42,10 +43,17 @@ typedef struct nl_message {
 
 /* For map handlers */
 typedef struct {
-        const char command;
         int (*handler)(const nlmsg_t *msg);
-} hdict_t;
+        char *name;
+} ipe_tool;
 
+
+
+typedef struct {
+        int     retcode;
+        char    report[IPE_BUFF_SIZE];
+        int     reserve;
+} ipe_answer;
 
 /* Functions that extend usage netlink */
 enum {
@@ -55,14 +63,8 @@ enum {
         /* debug: */
         IPE_PRINT_ADDR = 2,
 #endif
+        IPE_COMMAND_COUNT,
 };
-
-
-#ifdef IPE_DEBUG
-        #define IPE_COMMAND_COUNT        3 // one debug func extended
-#else
-        #define IPE_COMMAND_COUNT        2
-#endif
 
 
 #ifdef IPE_DEBUG
@@ -80,16 +82,17 @@ enum {
 /* Error's code: */
 enum {
         IPE_OK             = 0,
-        IPE_BAD_ARG        = 1,
-        IPE_BAD_VID        = 2,
-        IPE_BAD_IF_IDX     = 3,
-        IPE_UNKNOWN_ACTION = 4,
-        IPE_FAIL_NS        = 5,
-        IPE_FAIL_CR_SOC    = 6,
-        IPE_FEW_ARG        = 7,
-        IPE_NULLPTR        = 8,
-        IPE_BAD_SOC        = 9,
-        IPE_DEFAULT_FAIL   = 42,
+        IPE_BAD_ARG,
+        IPE_BAD_VID,
+        IPE_BAD_IF_IDX,
+        IPE_UNKNOWN_COMMAND,
+        IPE_FAIL_NS,
+        IPE_FAIL_CR_SOC,
+        IPE_FEW_ARG,
+        IPE_NULLPTR,
+        IPE_BAD_SOC,
+        IPE_BAD_ALLOC,
+        IPE_DEFAULT_FAIL,
 };
 
 #endif // __IPE_IPE_H
