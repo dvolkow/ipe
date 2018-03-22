@@ -43,18 +43,19 @@
 typedef struct net_device ndev_t;
 
 
-static int set_vid(const nlmsg_t *msg);
-static int set_eth(const nlmsg_t *msg);
+static int set_vid(const ipe_nlmsg_t *msg);
+static int set_eth(const ipe_nlmsg_t *msg);
 
 
 static struct sock *nl_sk = NULL;
 
-static ipe_tool commap[IPE_COMMAND_COUNT] = {
+
+static ipe_tool_t commap[IPE_COMMAND_COUNT] = {
         {set_vid, "set_vid"},
         {set_eth, "set_eth"},
         /* debug: */
         #ifdef IPE_DEBUG
-        {show_vlan_info, "show_vlan_info"},
+                {show_vlan_info, "show_vlan_info"},
         #endif
 };
 
@@ -62,7 +63,7 @@ static ipe_tool commap[IPE_COMMAND_COUNT] = {
 
 
 
-static int fetch_and_exec(const nlmsg_t *msg) {
+static int fetch_and_exec(const ipe_nlmsg_t *msg) {
         int command = msg->command;
 
         if (command < 0 || command >= IPE_COMMAND_COUNT) {
@@ -76,72 +77,16 @@ static int fetch_and_exec(const nlmsg_t *msg) {
 
 
 
-/*
- * Find device into custom namespace
- */
-static ndev_t *find_device_into_ns(const nlmsg_t *msg) {
-        struct net    *net; // namespace
-        ndev_t *dev;
-
-        rtnl_lock();
-        #ifdef IPE_DEBUG
-                LOG_RTNL_LOCK();
-        #endif
-
-        net = get_net_ns_by_fd(msg->nsfd);
-        if (IS_ERR(net))
-                goto unlock_fail;
-
-        for_each_netdev(net, dev) {
-                if (dev->ifindex == msg->ifindex) {
-                        dev_hold(dev);
-                        #ifdef IPE_DEBUG
-                                LOG_RTNL_UNLOCK();
-                        #endif
-                        rtnl_unlock();
-
-                        return dev;
-                }
-        }
-
-unlock_fail:
-        #ifdef IPE_DEBUG
-                LOG_RTNL_UNLOCK();
-        #endif
-        rtnl_unlock();
-        printk(KERN_ERR "%s: fail!\n", __FUNCTION__);
-
-        return NULL;
-}
-
-
 
 
 /*
  * Fetch find case in dependency of type namespace (defaulf/custom)
  * ATTENTION! Here called "dev_hold" function!
  */
-ndev_t *get_dev(const nlmsg_t *msg) {
-        if (msg->nsfd == IPE_GLOBAL_NS) {
-                #ifdef IPE_DEBUG
-                        printk(KERN_DEBUG "%s: global namespace search...\n",
-                                                        __FUNCTION__);
-                #endif
-
-                return dev_get_by_index(&init_net, msg->ifindex);
-        } else {
-                #ifdef IPE_DEBUG
-                        printk(KERN_DEBUG "%s: %d namespace search...\n", 
-                                             __FUNCTION__, msg->nsfd);
-                #endif
-
-                return find_device_into_ns(msg);
-        }
-
-        printk(KERN_ERR "%s: failure of search by index %d\n", 
-                                          __FUNCTION__, msg->ifindex);
-
-        return NULL;
+ndev_t *get_dev(const ipe_nlmsg_t *msg) {
+        return dev_get_by_index(msg->nsfd == IPE_GLOBAL_NS ? 
+                                &init_net : get_net_ns_by_fd(msg->nsfd),
+                                                                msg->ifindex);
 }
 
 
@@ -149,13 +94,13 @@ ndev_t *get_dev(const nlmsg_t *msg) {
 
 
 
-static int set_vid(const nlmsg_t *msg) {
+static int set_vid(const ipe_nlmsg_t *msg) {
         #ifdef IPE_DEBUG
                 printk(KERN_DEBUG "%s has been called\n", __FUNCTION__);
         #endif
 
         ndev_t *vlan_dev = get_dev(msg);
-        if (!vlan_dev) {
+        if (!vlan_dev || IS_ERR(vlan_dev)) {
                 printk(KERN_WARNING "%s: fail search device #%d info net_namespace [%d]\n",
                                         __FUNCTION__, msg->ifindex, msg->nsfd);
                 goto set_fail;
@@ -258,7 +203,7 @@ set_fail:
  * TODO: This functions are very similary, should be think about 
  * refactoring. Moreover, they is very long
  */
-static int set_eth(const nlmsg_t *msg) {
+static int set_eth(const ipe_nlmsg_t *msg) {
         #ifdef IPE_DEBUG
                 printk(KERN_DEBUG "%s has been called\n", __FUNCTION__);
         #endif
@@ -354,18 +299,19 @@ set_fail:
 
 
 
-static int send_answer(struct nlmsghdr *nlh, const nlmsg_t *msg, 
-                                                ipe_answer *answer) 
+static int send_reply(struct nlmsghdr *nlh, const ipe_nlmsg_t *msg, 
+                                                ipe_reply_t *reply) 
 {
         struct sk_buff *skb;
         int pid;
         int msg_size;
+        int res;
 
 #ifdef IPE_DEBUG
         printk(KERN_DEBUG "%s: entry nlh %p, msg %p\n", 
                         __FUNCTION__, nlh, msg);
 #endif
-        msg_size = sizeof(ipe_answer);
+        msg_size = sizeof(ipe_reply_t);
         pid = nlh->nlmsg_pid; /* pid of sending process */
 #ifdef IPE_DEBUG
         printk(KERN_DEBUG "%s: process to send message: [%d]\n", 
@@ -380,15 +326,15 @@ static int send_answer(struct nlmsghdr *nlh, const nlmsg_t *msg,
 
         nlh = nlmsg_put(skb, 0, 0, NLMSG_DONE, msg_size, 0);
         NETLINK_CB(skb).dst_group = 0; /* not in mcast group */
-        memcpy(nlmsg_data(nlh), answer, msg_size);
+        memcpy(nlmsg_data(nlh), reply, msg_size);
 
 #ifdef IPE_DEBUG
         printk(KERN_DEBUG "%s: payload -- %d\n", 
-                        __FUNCTION__, ((ipe_answer *)nlmsg_data(nlh))->retcode);
-        printk(KERN_DEBUG "%s: retcode %d\n", __FUNCTION__, answer->retcode);
+                        __FUNCTION__, ((ipe_reply_t *)nlmsg_data(nlh))->retcode);
+        printk(KERN_DEBUG "%s: retcode %d\n", __FUNCTION__, reply->retcode);
 #endif
 
-        int res = nlmsg_unicast(nl_sk, skb, pid);
+        res = nlmsg_unicast(nl_sk, skb, pid);
 
         if (res < 0) {
                 printk(KERN_ERR "%s: error while sending back to user %d\n",
@@ -396,21 +342,21 @@ static int send_answer(struct nlmsghdr *nlh, const nlmsg_t *msg,
                 return IPE_DEFAULT_FAIL;
         }
 
-        return IPE_OK;
+        return res;
 }
 
 
 
-static void init_answer(ipe_answer *answer, const int retcode,
-                                            const nlmsg_t *msg) 
+static void init_reply(ipe_reply_t *reply, const int retcode,
+                                            const ipe_nlmsg_t *msg) 
 {
-        answer->retcode  = retcode;
+        reply->retcode  = retcode;
         if (retcode) {
-                snprintf(answer->report, IPE_BUFF_SIZE, 
+                snprintf(reply->report, IPE_BUFF_SIZE, 
                         "%s(%d) return with exit code 0x%x\n",
                          commap[(int)(msg->command)].name, msg->value, retcode);
         } else {
-                snprintf(answer->report, IPE_BUFF_SIZE, 
+                snprintf(reply->report, IPE_BUFF_SIZE, 
                         "%s(%d) success!\n",
                          commap[(int)(msg->command)].name, msg->value);
         }
@@ -422,26 +368,26 @@ static void init_answer(ipe_answer *answer, const int retcode,
  */
 static void vlan_ext_handler(struct sk_buff *skb) {
         struct  nlmsghdr *nlh;
-        nlmsg_t *msg;
-        ipe_answer answer;
+        ipe_nlmsg_t *msg;
+        ipe_reply_t reply;
         int res;
 
         nlh = (struct nlmsghdr*)skb->data;
-        msg = (nlmsg_t *)nlmsg_data(nlh);
+        msg = (ipe_nlmsg_t *)nlmsg_data(nlh);
 
         #ifdef IPE_DEBUG
                 printk_msg(msg);
         #endif
 
-        init_answer(&answer, fetch_and_exec(msg), msg);
+        init_reply(&reply, fetch_and_exec(msg), msg);
 
-        res = send_answer(nlh, msg, &answer);
-#ifdef IPE_DEBUG
+        res = send_reply(nlh, msg, &reply);
+        #ifdef IPE_DEBUG
         if (res) {
-                printk(KERN_ERR "%s: send_answer return with exit code %d!\n",
+                printk(KERN_ERR "%s: send_reply return with exit code %d!\n",
                                                            __FUNCTION__, res);
         }
-#endif
+        #endif
 }
 
 

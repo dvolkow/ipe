@@ -18,19 +18,20 @@
 * The initial motivation for this was the possibility of changing the vlan_id 
 * and vlan_proto "on the spot," without having to remove the network interfaces 
 *
+*                               FOR USERSPACE
 ******************************************************************************/
 
 #ifndef __IPE_IPE_H
 #define __IPE_IPE_H              1
 
 
-#define IPE_ARGS_COUNT           3
-
 #define NETLINK_USER            31 /* this port than used kernel module */
 #define MAX_PATH_LEN            256
 #define NETNS_RUN_DIR           "/var/run/netns"
-#define IPE_BUFF_SIZE           128
 
+#ifdef IPE_DEBUG
+        #define IPE_BUFF_SIZE   128
+#endif
 
 /* This structure for Netlink message into ipe */
 typedef struct nl_message {
@@ -41,19 +42,16 @@ typedef struct nl_message {
 } ipe_nlmsg_t;
 
 
-/* For map handlers */
-typedef struct {
-        int (*handler)(const ipe_nlmsg_t *msg);
-        char *name;
-} ipe_tool_t;
-
-
 
 typedef struct {
         int     retcode;
+#ifdef IPE_DEBUG
         char    report[IPE_BUFF_SIZE];
+#endif
         int     reserve;
 } ipe_reply_t;
+
+
 
 /* Functions that extend usage netlink */
 enum {
@@ -67,16 +65,6 @@ enum {
 };
 
 
-#ifdef IPE_DEBUG
-        #define LOG_RTNL_LOCK()    printk(KERN_ERR "%s: rtnl_lock (%d)\n", \
-                                                __FUNCTION__, __LINE__)
-        #define LOG_RTNL_UNLOCK()  printk(KERN_ERR "%s: rtnl_unlock (%d)\n", \
-                                                __FUNCTION__, __LINE__)
-#endif
-
-
-/* Invalid descriptor for case global netns */
-#define IPE_GLOBAL_NS   (-1)
 
 
 /* Error's code: */

@@ -1,2 +1,3 @@
+CFLAGS=-DIPE_DEBUG
 all: 
-	gcc -Wall -O2 ipe.c -o ../ipe
+	$(CC) $(CFLAGS) -Wall -O2 ipe.c -o ../ipe
