@@ -396,7 +396,7 @@ static int send_answer(struct nlmsghdr *nlh, const nlmsg_t *msg,
                 return IPE_DEFAULT_FAIL;
         }
 
-        return IPE_OK;
+        return res;
 }
 
 
@@ -436,12 +436,12 @@ static void vlan_ext_handler(struct sk_buff *skb) {
         init_answer(&answer, fetch_and_exec(msg), msg);
 
         res = send_answer(nlh, msg, &answer);
-#ifdef IPE_DEBUG
+        #ifdef IPE_DEBUG
         if (res) {
                 printk(KERN_ERR "%s: send_answer return with exit code %d!\n",
                                                            __FUNCTION__, res);
         }
-#endif
+        #endif
 }
 
 
