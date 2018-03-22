@@ -34,18 +34,18 @@
 
 /* This structure for Netlink message into ipe */
 typedef struct nl_message {
-        int     ifindex;     
-        int     nsfd;
-        int     value;
-        char    command;
-} nlmsg_t;
+        int   ifindex;     
+        int   nsfd;
+        int   value;
+        char  command;
+} ipe_nlmsg_t;
 
 
 /* For map handlers */
 typedef struct {
-        int (*handler)(const nlmsg_t *msg);
+        int (*handler)(const ipe_nlmsg_t *msg);
         char *name;
-} ipe_tool;
+} ipe_tool_t;
 
 
 
@@ -53,7 +53,7 @@ typedef struct {
         int     retcode;
         char    report[IPE_BUFF_SIZE];
         int     reserve;
-} ipe_answer;
+} ipe_reply_t;
 
 /* Functions that extend usage netlink */
 enum {

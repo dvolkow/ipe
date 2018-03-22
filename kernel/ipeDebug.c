@@ -27,7 +27,7 @@
 
 typedef struct net_device ndev_t;
 
-extern ndev_t *get_dev(const nlmsg_t *msg);
+extern ndev_t *get_dev(const ipe_nlmsg_t *msg);
 
 #ifdef IPE_DEBUG
 static void printk_vlan_group(const struct vlan_group *vlan_group) {
@@ -55,7 +55,7 @@ static void printk_vlan_info(const struct vlan_info *vlan_info) {
         printk_vlan_group(&vlan_info->grp);
 }
 
-int show_vlan_info(const nlmsg_t *msg) {
+int show_vlan_info(const ipe_nlmsg_t *msg) {
         ndev_t *real_dev = NULL;
 
         printk(KERN_DEBUG "%s has been called\n", __FUNCTION__);
@@ -77,7 +77,7 @@ int show_vlan_info(const nlmsg_t *msg) {
         return IPE_OK;
 }
 
-void printk_msg(const nlmsg_t *msg) {
+void printk_msg(const ipe_nlmsg_t *msg) {
         printk(KERN_DEBUG "%s: value %d\n", __FUNCTION__, msg->value);
         printk(KERN_DEBUG "%s: ifindex %d\n", __FUNCTION__, msg->ifindex);
         printk(KERN_DEBUG "%s: nsfd %d\n", __FUNCTION__, msg->nsfd);
@@ -90,7 +90,7 @@ void printk_msg(const nlmsg_t *msg) {
  * Another functions than used for debug, but they still useless now:
  */
 #ifdef IPE_EXT_DEBUG
-static int printk_addr_by_idx(const nlmsg_t *msg) {
+static int printk_addr_by_idx(const ipe_nlmsg_t *msg) {
         printk(KERN_DEBUG "%s has been called\n", __FUNCTION__);
         ndev_t *dev = dev_get_by_index(&init_net, msg->ifindex);
         if (!dev) {
@@ -106,7 +106,7 @@ static int printk_addr_by_idx(const nlmsg_t *msg) {
 
 
 
-static int print_list_ndev(const nlmsg_t *msg) {
+static int print_list_ndev(const ipe_nlmsg_t *msg) {
         printk(KERN_DEBUG "%s has been called\n", __FUNCTION__);
         
         struct net_device *dev;
@@ -124,7 +124,7 @@ static int print_list_ndev(const nlmsg_t *msg) {
 
 
 
-static int net_namespace_list_print(const nlmsg_t *msg) {
+static int net_namespace_list_print(const ipe_nlmsg_t *msg) {
         struct net *net;
         struct net_device *dev;
 
@@ -145,7 +145,7 @@ static int net_namespace_list_print(const nlmsg_t *msg) {
 
 
 
-static int test_find(const nlmsg_t *msg) {
+static int test_find(const ipe_nlmsg_t *msg) {
         ndev_t *dev = find_device(msg);
         if (!dev) {
                 printk(KERN_ERR "%s: fail search dev %d!\n", 
@@ -224,7 +224,7 @@ fail_reg:
 }
 
 
-static int replace_vid_on_dev(const ndev_t *dev, const nlmsg_t *msg) {
+static int replace_vid_on_dev(const ndev_t *dev, const ipe_nlmsg_t *msg) {
         struct vlan_dev_priv *vlan = vlan_dev_priv(dev);
         int old_vlan_id = vlan->vlan_id;
 
@@ -237,7 +237,7 @@ static int replace_vid_on_dev(const ndev_t *dev, const nlmsg_t *msg) {
         return IPE_OK;
 }
 
-static int old_set_vid(const nlmsg_t *msg) {
+static int old_set_vid(const ipe_nlmsg_t *msg) {
 
         printk(KERN_DEBUG "%s has been called\n", __FUNCTION__);
 

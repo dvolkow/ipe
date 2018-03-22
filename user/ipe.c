@@ -46,8 +46,8 @@ typedef struct nlmsghdr nmsgh_t;
 typedef struct {
         char *net;
         char *ctype;
-        int value;
-        int ifindex;
+        int   value;
+        int   ifindex;
 } ipe_arg_t;
 
 
@@ -107,7 +107,7 @@ static void create_msg() {
                 printf("%s: entry\n", __FUNCTION__);
         #endif
 
-        nlmsg_t msgs = {
+        ipe_nlmsg_t msgs = {
                 .value = g_arg.value,
                 .ifindex = g_arg.ifindex,     
                 .nsfd = g_arg.net ? get_netns_fd(g_arg.net) : -1,
@@ -263,7 +263,7 @@ ret_ok:
 
 int main(int args, char **argv)
 {
-        ipe_answer answer;
+        ipe_reply_t reply;
         int res = parse_arg(args, argv);
         if (res) {
                 return res;
@@ -279,12 +279,12 @@ int main(int args, char **argv)
         sending(&msg);
 
         recvmsg(sock_fd, &msg, 0);
-        memcpy(&answer, NLMSG_DATA(nlh), sizeof(answer));
+        memcpy(&reply, NLMSG_DATA(nlh), sizeof(ipe_reply_t));
 
-        printf("%s", answer.report);
+        printf("%s", reply.report);
 
         free(nlh);
         close(sock_fd);
 
-        return answer.retcode;
+        return reply.retcode;
 }
