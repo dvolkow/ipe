@@ -281,7 +281,9 @@ int main(int args, char **argv)
         recvmsg(sock_fd, &msg, 0);
         memcpy(&reply, NLMSG_DATA(nlh), sizeof(ipe_reply_t));
 
+#ifdef IPE_DEBUG
         printf("%s", reply.report);
+#endif
 
         free(nlh);
         close(sock_fd);
