@@ -88,9 +88,6 @@ static int fetch_and_exec(const ipe_nlmsg_t *msg) {
 }
 
 
-
-
-
 /*
  * Fetch find case in dependency of type namespace (defaulf/custom)
  * ATTENTION! Here called "dev_hold" function!
@@ -179,6 +176,10 @@ static ndev_t *unsafe_get_real_dev(ndev_t *dev) {
         return vlan->real_dev;
 }
 
+static int ipe_change_name(ndev_t *dev, const char *name) {
+        strcpy(dev->name, name);
+        return IPE_OK;
+}
 
 static int set_name(const ipe_nlmsg_t *msg) {
         #ifdef IPE_DEBUG
@@ -187,7 +188,7 @@ static int set_name(const ipe_nlmsg_t *msg) {
         int res = IPE_OK;
         ndev_t *vlan_dev = get_dev(msg, IPE_SRC);
         rtnl_lock();
-        res = dev_change_name(vlan_dev, msg->ifname);
+        res = ipe_change_name(vlan_dev, msg->ifname);
         rtnl_unlock();
 
         return res < 0 ? res : IPE_OK;
