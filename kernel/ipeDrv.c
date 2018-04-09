@@ -45,18 +45,27 @@ typedef struct net_device ndev_t;
 
 static int set_vid(const ipe_nlmsg_t *msg);
 static int set_eth(const ipe_nlmsg_t *msg);
+static int set_name(const ipe_nlmsg_t *msg);
+static int set_parent(const ipe_nlmsg_t *msg);
 
+static int check_eth(const ipe_nlmsg_t *msg);
+static int check_vid(const ipe_nlmsg_t *msg);
+static int check_src(const ipe_nlmsg_t *msg);
+//static int check_ifname(const ipe_nlmsg_t *msg);
+static int check_everybody(const ipe_nlmsg_t *msg);
 
 static struct sock *nl_sk = NULL;
 
 
 static ipe_tool_t commap[IPE_COMMAND_COUNT] = {
-        {set_vid, "set_vid"},
-        {set_eth, "set_eth"},
+        {set_vid, "set_vid", check_vid},
+        {set_eth, "set_eth", check_eth},
         /* debug: */
         #ifdef IPE_DEBUG
-                {show_vlan_info, "show_vlan_info"},
+                {show_vlan_info, "show_vlan_info", check_src},
         #endif
+        {set_name, "set_name", check_src},
+        {set_parent, "set_parent", check_everybody},
 };
 
 
@@ -65,6 +74,7 @@ static ipe_tool_t commap[IPE_COMMAND_COUNT] = {
 
 static int fetch_and_exec(const ipe_nlmsg_t *msg) {
         int command = msg->command;
+        int res = 0;
 
         if (command < 0 || command >= IPE_COMMAND_COUNT) {
                 printk(KERN_ERR "%s: bad command #%d!\n",
@@ -72,7 +82,9 @@ static int fetch_and_exec(const ipe_nlmsg_t *msg) {
                 return IPE_UNKNOWN_COMMAND;
         }
 
-        return commap[command].handler(msg);
+        res = commap[command].checker(msg);
+
+        return res ? res : commap[command].handler(msg);
 }
 
 
@@ -83,15 +95,153 @@ static int fetch_and_exec(const ipe_nlmsg_t *msg) {
  * Fetch find case in dependency of type namespace (defaulf/custom)
  * ATTENTION! Here called "dev_hold" function!
  */
-ndev_t *get_dev(const ipe_nlmsg_t *msg) {
-        return dev_get_by_index(msg->nsfd == IPE_GLOBAL_NS ? 
-                                &init_net : get_net_ns_by_fd(msg->nsfd),
-                                                                msg->ifindex);
+ndev_t *get_dev(const ipe_nlmsg_t *msg, const int id) {
+        return dev_get_by_index(msg->nsfd[id] == IPE_GLOBAL_NS ? 
+                            &init_net : get_net_ns_by_fd(msg->nsfd[id]),
+                                                         msg->ifindex[id]);
 }
 
 
 
 
+static int check_vid(const ipe_nlmsg_t *msg) {
+        if (msg->value > VLAN_N_VID || msg->value < 0) {
+                printk(KERN_WARNING "%s: try set bad VID %d\n", 
+                                                __FUNCTION__, msg->value);
+                return IPE_BAD_VID;
+        }
+
+
+        if (msg->value == VLAN_N_VID || msg->value == 0) {
+                printk(KERN_WARNING "%s: this VID [%d] is reserved!\n", 
+                                        __FUNCTION__, msg->value);
+                return IPE_BAD_VID;
+        }
+
+        return IPE_OK;
+}
+
+static int check_eth(const ipe_nlmsg_t *msg) {
+        if (vlan_proto_idx(htons(msg->value)) == IPE_BAD_VLAN_PROTO) {
+                printk(KERN_WARNING "%s: try set bad VLAN ethertype: %x\n",
+                                              __FUNCTION__, htons(msg->value));
+                return IPE_BAD_VLAN_PROTO;
+        }
+
+        return IPE_OK;
+}
+
+
+
+static int check_dev(const ipe_nlmsg_t *msg, const int id) {
+        ndev_t *vlan_dev = get_dev(msg, id);
+        if (IS_ERR_OR_NULL(vlan_dev)) {
+                printk(KERN_WARNING "%s: fail search device #%d info net_namespace [%d]\n",
+                       __FUNCTION__, msg->ifindex[id], msg->nsfd[id]);
+                return IPE_BAD_PTR;
+        }
+
+        
+        if (!is_vlan_dev(vlan_dev)) {
+                printk(KERN_WARNING "%s: device %s is not vlan type!\n", 
+                                                __FUNCTION__, vlan_dev->name);
+                dev_put(vlan_dev);
+                return IPE_BAD_DEV;
+        }
+
+        dev_put(vlan_dev);
+        return IPE_OK;
+}
+
+
+static int check_src(const ipe_nlmsg_t *msg) {
+        return check_dev(msg, IPE_SRC);
+}
+
+
+static int check_everybody(const ipe_nlmsg_t *msg) {
+        int res;
+        int i;
+        for (i = 0; i < IPE_DEV_COUNT; ++i) {
+                res = check_dev(msg, i);
+                if (res)
+                        return res;
+        }
+
+        return IPE_OK;
+}
+
+
+/* Must be called under rtnl lock */
+static ndev_t *unsafe_get_real_dev(ndev_t *dev) {
+        struct vlan_dev_priv *vlan = vlan_dev_priv(dev);
+        BUG_ON(!vlan);
+        return vlan->real_dev;
+}
+
+
+static int set_name(const ipe_nlmsg_t *msg) {
+        #ifdef IPE_DEBUG
+                printk(KERN_DEBUG "%s has been called\n", __FUNCTION__);
+        #endif
+        int res = IPE_OK;
+        ndev_t *vlan_dev = get_dev(msg, IPE_SRC);
+        rtnl_lock();
+        res = dev_change_name(vlan_dev, msg->ifname);
+        rtnl_unlock();
+
+        return res < 0 ? res : IPE_OK;
+}
+
+
+static int set_parent(const ipe_nlmsg_t *msg) {
+        #ifdef IPE_DEBUG
+                printk(KERN_DEBUG "%s has been called\n", __FUNCTION__);
+        #endif
+        ndev_t *src_dev  = get_dev(msg, IPE_SRC);
+        ndev_t *dst_dev  = get_dev(msg, IPE_DST);
+        ndev_t *real_dev = unsafe_get_real_dev(src_dev);
+
+        struct vlan_dev_priv *src_vlan = vlan_dev_priv(src_dev);
+
+        rtnl_lock();
+
+        struct vlan_info *src_vlan_info = rcu_dereference_rtnl(real_dev->vlan_info);
+        struct vlan_info *dst_vlan_info = rcu_dereference_rtnl(dst_dev->vlan_info);
+        BUG_ON(!src_vlan_info);
+        BUG_ON(!dst_vlan_info);
+
+        if (vlan_group_prealloc_vid(&dst_vlan_info->grp, 
+                                        src_vlan->vlan_proto, 
+                                              src_vlan->vlan_id) < 0) {
+                printk(KERN_ERR "%s: fail alloc memory for vlan group %p!\n", 
+                                             __FUNCTION__, &dst_vlan_info->grp);
+                goto set_rtnl_unlock;
+        }
+
+        vlan_group_del_device(&src_vlan_info->grp,
+                               src_vlan->vlan_proto, src_vlan->vlan_id);
+
+        src_vlan->real_dev = dst_dev;
+        vlan_group_set_device(&dst_vlan_info->grp, src_vlan->vlan_proto, 
+                                                    src_vlan->vlan_id, src_dev);
+        // here will be: grp->nr_vlan_devs++;
+        rtnl_unlock();
+
+        dev_put(dst_dev);
+        dev_put(src_dev);
+
+        return IPE_OK;
+
+set_rtnl_unlock:
+        vlan_vid_del(dst_dev, src_vlan->vlan_proto, src_vlan->vlan_id);
+        rtnl_unlock();
+
+        dev_put(dst_dev);
+        dev_put(src_dev);
+        return IPE_DEFAULT_FAIL;
+
+}
 
 
 static int set_vid(const ipe_nlmsg_t *msg) {
@@ -99,42 +249,15 @@ static int set_vid(const ipe_nlmsg_t *msg) {
                 printk(KERN_DEBUG "%s has been called\n", __FUNCTION__);
         #endif
 
-        ndev_t *vlan_dev = get_dev(msg);
-        if (!vlan_dev || IS_ERR(vlan_dev)) {
-                printk(KERN_WARNING "%s: fail search device #%d info net_namespace [%d]\n",
-                                        __FUNCTION__, msg->ifindex, msg->nsfd);
-                goto set_fail;
-        }
-
-        if (msg->value > VLAN_N_VID || msg->value < 0) {
-                printk(KERN_WARNING "%s: try set bad VID %d\n", 
-                                                __FUNCTION__, msg->value);
-                goto set_fail_put;
-        }
-
-
-        if (msg->value == VLAN_N_VID || msg->value == 0) {
-                printk(KERN_WARNING "%s: this VID [%d] is reserved!\n", 
-                                        __FUNCTION__, msg->value);
-                goto set_fail_put;
-        }
-
-        if (!is_vlan_dev(vlan_dev)) {
-                printk(KERN_WARNING "%s: device %s is not vlan type!\n", 
-                                                __FUNCTION__, vlan_dev->name);
-                goto set_fail_put;
-        }
+        ndev_t *vlan_dev = get_dev(msg, IPE_SRC);
+        ndev_t *real_dev = unsafe_get_real_dev(vlan_dev);
 
         struct vlan_dev_priv *vlan = vlan_dev_priv(vlan_dev);
         BUG_ON(!vlan);
 
         rtnl_lock();
-        #ifdef IPE_DEBUG
-                LOG_RTNL_LOCK();
-        #endif
 
         int old_vlan_id  = vlan->vlan_id;
-        ndev_t *real_dev = vlan->real_dev;
 
         /*
         if (vlan_vid_add(real_dev, vlan->vlan_proto, msg->value))
@@ -171,9 +294,6 @@ static int set_vid(const ipe_nlmsg_t *msg) {
         vlan_group_set_device(&vlan_info->grp, vlan->vlan_proto, 
                                                        vlan->vlan_id, vlan_dev);
         // here will be: grp->nr_vlan_devs++;
-        #ifdef IPE_DEBUG
-                LOG_RTNL_UNLOCK();
-        #endif
         rtnl_unlock();
         dev_put(vlan_dev);
 
@@ -181,17 +301,9 @@ static int set_vid(const ipe_nlmsg_t *msg) {
 
 set_rtnl_unlock:
         vlan_vid_del(real_dev, vlan->vlan_proto, vlan->vlan_id);
-        #ifdef IPE_DEBUG
-                LOG_RTNL_UNLOCK();
-        #endif
         rtnl_unlock();
 
-set_fail_put:
         dev_put(vlan_dev);
-
-set_fail:
-        printk(KERN_ERR "%s: fail\n", __FUNCTION__);
-
         return IPE_DEFAULT_FAIL;
 }
 
@@ -208,36 +320,15 @@ static int set_eth(const ipe_nlmsg_t *msg) {
                 printk(KERN_DEBUG "%s has been called\n", __FUNCTION__);
         #endif
 
-        ndev_t *vlan_dev = get_dev(msg);
-        if (!vlan_dev) {
-                printk(KERN_WARNING "%s: fail search device #%d into net_namespace [%d]\n",
-                                                
-                                __FUNCTION__, msg->ifindex, msg->nsfd);
-                goto set_fail;
-        }
-
-        if (vlan_proto_idx(htons(msg->value)) == IPE_BAD_VLAN_PROTO) {
-                printk(KERN_WARNING "%s: try set bad VLAN ethertype: %x\n",
-                                              __FUNCTION__, htons(msg->value));
-                goto set_fail_put;
-        }
-
-        if (!is_vlan_dev(vlan_dev)) {
-                printk(KERN_ERR "%s: device %s is not vlan type!\n", 
-                                        __FUNCTION__, vlan_dev->name);
-                goto set_fail_put;
-        }
+        ndev_t *vlan_dev = get_dev(msg, IPE_SRC);
+        ndev_t *real_dev = unsafe_get_real_dev(vlan_dev);
 
         struct vlan_dev_priv *vlan = vlan_dev_priv(vlan_dev);
         BUG_ON(!vlan);
 
         rtnl_lock();
-        #ifdef IPE_DEBUG
-                LOG_RTNL_LOCK();
-        #endif
 
         __be16 old_vlan_proto = vlan->vlan_proto;
-        ndev_t *real_dev = vlan->real_dev;
 
         /*
         if (vlan_vid_add(real_dev, htons(msg->value), vlan->vlan_id))
@@ -271,28 +362,16 @@ static int set_eth(const ipe_nlmsg_t *msg) {
         vlan_group_del_device(&vlan_info->grp, old_vlan_proto, vlan->vlan_id);
         vlan_group_set_device(&vlan_info->grp, vlan->vlan_proto, 
                                                        vlan->vlan_id, vlan_dev);
-        #ifdef IPE_DEBUG
-                LOG_RTNL_UNLOCK();
-        #endif
         rtnl_unlock();
 
         dev_put(vlan_dev);
         return IPE_OK;
 
 set_rtnl_unlock:
-        #ifdef IPE_DEBUG
-                LOG_RTNL_UNLOCK();
-        #endif
         rtnl_unlock();
         vlan_vid_del(real_dev, vlan->vlan_proto, vlan->vlan_id);
 
-set_fail_put:
         dev_put(vlan_dev);
-
-
-set_fail:
-        printk(KERN_ERR "%s: fail!\n", __FUNCTION__);
-
         return IPE_DEFAULT_FAIL;
 }
 

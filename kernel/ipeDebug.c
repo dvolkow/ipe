@@ -79,8 +79,8 @@ int show_vlan_info(const ipe_nlmsg_t *msg) {
 
 void printk_msg(const ipe_nlmsg_t *msg) {
         printk(KERN_DEBUG "%s: value %d\n", __FUNCTION__, msg->value);
-        printk(KERN_DEBUG "%s: ifindex %d\n", __FUNCTION__, msg->ifindex);
-        printk(KERN_DEBUG "%s: nsfd %d\n", __FUNCTION__, msg->nsfd);
+        printk(KERN_DEBUG "%s: ifindex %d\n", __FUNCTION__, msg->ifindex[IPE_SRC]);
+        printk(KERN_DEBUG "%s: nsfd %d\n", __FUNCTION__, msg->nsfd[IPE_SRC]);
         printk(KERN_DEBUG "%s: command %c\n", __FUNCTION__, msg->command);
 }
 #endif // IPE_DEBUG
@@ -92,15 +92,15 @@ void printk_msg(const ipe_nlmsg_t *msg) {
 #ifdef IPE_EXT_DEBUG
 static int printk_addr_by_idx(const ipe_nlmsg_t *msg) {
         printk(KERN_DEBUG "%s has been called\n", __FUNCTION__);
-        ndev_t *dev = dev_get_by_index(&init_net, msg->ifindex);
+        ndev_t *dev = dev_get_by_index(&init_net, msg->ifindex[IPE_SRC]);
         if (!dev) {
                 printk(KERN_DEBUG "%s: failure of search by index %d\n", 
-                                                __FUNCTION__, msg->ifindex);
+                                                __FUNCTION__, msg->ifindex[IPE_SRC]);
                 return IPE_BAD_IF_IDX;
         }
 
         printk(KERN_DEBUG "%s: device by index %d: %p\n", 
-                                              __FUNCTION__, msg->ifindex, dev);
+                                           __FUNCTION__, msg->ifindex[IPE_SRC], dev);
         return IPE_OK;
 }
 
@@ -149,7 +149,7 @@ static int test_find(const ipe_nlmsg_t *msg) {
         ndev_t *dev = find_device(msg);
         if (!dev) {
                 printk(KERN_ERR "%s: fail search dev %d!\n", 
-                                        __FUNCTION__, msg->ifindex);
+                                        __FUNCTION__, msg->ifindex[IPE_SRC]);
                 return IPE_BAD_ARG;
         }
 

@@ -26,11 +26,13 @@
 #include <sys/socket.h>
 #include <fcntl.h>
 #include <linux/netlink.h>
+#include <linux/if.h> // IFNAMSIZ
+
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 
-#include "../include/ipe.h"
+#include "ipe.h"
 
 #define MAX_PAYLOAD 1024  /* maximum payload size*/
 
@@ -44,19 +46,15 @@ typedef struct nlmsghdr nmsgh_t;
 
 /* Parser's structure for create Netlink message */
 typedef struct {
-        char *net;
+        char *net    [IPE_DEV_COUNT];
+        int   ifindex[IPE_DEV_COUNT];
+        char ifname  [IFNAMSIZ];
         char *ctype;
         int   value;
-        int   ifindex;
 } ipe_arg_t;
 
 
-static ipe_arg_t g_arg = {
-        .net     = NULL,
-        .ctype   = NULL,
-        .value   = 0,
-        .ifindex = 0
-};
+static ipe_arg_t g_arg;
 
 
 int sock_fd;
@@ -65,6 +63,19 @@ struct msghdr msg;
 nmsgh_t *nlh; 
 
 
+//#ifdef IPE_DEBUG
+static void print_msg(const ipe_nlmsg_t *msg) {
+        int i;
+        for (i = 0; i < IPE_DEV_COUNT; ++i)
+                printf("ifid #%d: %d\n", i, msg->ifindex[i]);
+        for (i = 0; i < IPE_DEV_COUNT; ++i)
+                printf("nsfd #%d: %d\n", i, msg->ifindex[i]);
+
+        printf("ifname: %s\n", msg->ifname);
+        printf("value: %d\n", msg->value);
+        printf("command: %c\n", msg->command);
+}
+//#endif
 
 static void prepare(void) {
         #ifdef IPE_DEBUG
@@ -106,17 +117,27 @@ static void create_msg() {
         #ifdef IPE_DEBUG
                 printf("%s: entry\n", __FUNCTION__);
         #endif
+        int i;
 
         ipe_nlmsg_t msgs = {
-                .value = g_arg.value,
-                .ifindex = g_arg.ifindex,     
-                .nsfd = g_arg.net ? get_netns_fd(g_arg.net) : -1,
+                .value   = g_arg.value,
         };
+
+        for (i = 0; i < IPE_DEV_COUNT; ++i) {
+                msgs.ifindex[i] = g_arg.ifindex[i];     
+                msgs.nsfd[i]    = g_arg.net[i] ? get_netns_fd(g_arg.net[i]) : -1;
+        }
+
+        strcpy(msgs.ifname, g_arg.ifname);
 
         if (!strcmp(g_arg.ctype, "id"))
                 msgs.command = IPE_SET_VID;
         else if (!strcmp(g_arg.ctype, "eth"))
                 msgs.command = IPE_SET_ETH;
+        else if (!strcmp(g_arg.ctype, "name"))
+                msgs.command = IPE_SET_NAME;
+        else if (!strcmp(g_arg.ctype, "prev"))
+                msgs.command = IPE_SET_PARENT;
 
         #ifdef IPE_DEBUG
                 else if (!strcmp(g_arg.ctype, "parent"))
@@ -126,6 +147,8 @@ static void create_msg() {
                                 __FUNCTION__, sizeof(msgs), (char *)nlh);
         #endif
 
+        printf("ok\n");
+        print_msg(&msgs);
         memcpy(NLMSG_DATA(nlh), &msgs, sizeof(msgs));
 
         #ifdef IPE_DEBUG
@@ -148,7 +171,7 @@ static void sending(struct msghdr *msgh) {
         nlh->nlmsg_pid   = getpid();
         nlh->nlmsg_flags = 0;
 
-        create_msg(nlh);
+        create_msg();
 
         iov.iov_base = (void *)nlh;
         iov.iov_len  = nlh->nlmsg_len;
@@ -168,8 +191,10 @@ static void sending(struct msghdr *msgh) {
 
 
 static void show_usage(void) {
-        printf("Usage: ipe dev IFINDEX [ netns NETNS ] id  [ VID ]\n");
-        printf("                                       eth [ ETH_TYPE ]\n");
+        printf("Usage: ipe dev IFINDEX [ netns NETNS ] id   [ VID ]\n");
+        printf("                                       eth  [ ETH_TYPE ]\n");
+        printf("                                       name [ IFNAME ]\n");
+        printf("                                       dst IFINDEX [ dstns NETNS ] prev\n");
         printf("where ETH_TYPE := { 33024 for 0x8100 aka 802.1Q          |\n");
         printf("                    34984 for 0x88A8 aka 802.1ad         }\n");
         /* TODO: need support into kernelspace */
@@ -196,10 +221,21 @@ static int parse_arg(int args, char **argv) {
                 if (matches("dev")) {
                         if (CHECK_ARGS(args)) {
                                 NEXT_ARG(args, argv);
-                                g_arg.ifindex = atoi(*argv);
+                                g_arg.ifindex[IPE_SRC] = atoi(*argv);
                                 #ifdef IPE_DEBUG
                                         printf("%s: get index %d\n", 
-                                                 __FUNCTION__, g_arg.ifindex);
+                                                 __FUNCTION__, g_arg.ifindex[IPE_SRC]);
+                                #endif
+                        } else {
+                                goto usage_ret;
+                        }
+                } else if (matches("dst")) {
+                        if (CHECK_ARGS(args)) {
+                                NEXT_ARG(args, argv);
+                                g_arg.ifindex[IPE_DST] = atoi(*argv);
+                                #ifdef IPE_DEBUG
+                                        printf("%s: get index %d\n", 
+                                                 __FUNCTION__, g_arg.ifindex[IPE_DST]);
                                 #endif
                         } else {
                                 goto usage_ret;
@@ -207,10 +243,21 @@ static int parse_arg(int args, char **argv) {
                 } else if (!strcmp(*argv, "netns")) {
                         if (CHECK_ARGS(args)) {
                                 NEXT_ARG(args, argv);
-                                g_arg.net = *argv;
+                                g_arg.net[IPE_SRC] = *argv;
                                 #ifdef IPE_DEBUG
                                         printf("%s: get net %s\n", 
-                                                 __FUNCTION__, g_arg.net);
+                                                 __FUNCTION__, g_arg.net[IPE_SRC]);
+                                #endif
+                        } else {
+                                goto usage_ret;
+                        }
+                } else if (!strcmp(*argv, "dstns")) {
+                        if (CHECK_ARGS(args)) {
+                                NEXT_ARG(args, argv);
+                                g_arg.net[IPE_DST] = *argv;
+                                #ifdef IPE_DEBUG
+                                        printf("%s: get net %s\n", 
+                                                 __FUNCTION__, g_arg.net[IPE_DST]);
                                 #endif
                         } else {
                                 goto usage_ret;
@@ -241,8 +288,24 @@ static int parse_arg(int args, char **argv) {
                         } else {
                                 goto usage_ret;
                         }
-                } else if (matches("parent")) {
+                } else if (matches("name")) {
                         g_arg.ctype = *argv;
+                        if (CHECK_ARGS(args)) {
+                                NEXT_ARG(args, argv);
+                                strcpy(g_arg.ifname, *argv);
+                                #ifdef IPE_DEBUG
+                                        printf("%s: get command set ifname %s\n", 
+                                                 __FUNCTION__, g_arg.ifname);
+                                #endif
+                                goto ret_ok;
+                        } else {
+                                goto usage_ret;
+                        }
+                } else if (matches("prev")) {
+                        g_arg.ctype = *argv;
+                        goto ret_ok;
+                } else if (matches("parent")) {
+                        strcpy(g_arg.ifname, *argv);
                         goto ret_ok;
                 } else {
                         printf("%s: arg \"%s\" not matches\n", 
@@ -266,14 +329,17 @@ int main(int args, char **argv)
         ipe_reply_t reply;
         int res = parse_arg(args, argv);
         if (res) {
+                printf("res %d\n", res);
                 return res;
         }
 
 
         sock_fd = socket(PF_NETLINK, SOCK_RAW, NETLINK_USER);
 
-        if (sock_fd < 0)
+        if (sock_fd < 0) {
+                printf("Bad socket: %d\n", sock_fd);
                 return IPE_BAD_SOC;
+        }
 
         prepare();
         sending(&msg);

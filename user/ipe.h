@@ -33,14 +33,21 @@
         #define IPE_BUFF_SIZE   128
 #endif
 
+enum {
+        IPE_SRC,
+        IPE_DST,
+        IPE_DEV_COUNT,
+};
+
+
 /* This structure for Netlink message into ipe */
 typedef struct nl_message {
-        int   ifindex;     
-        int   nsfd;
+        int   ifindex [IPE_DEV_COUNT];     
+        int   nsfd    [IPE_DEV_COUNT];
+        char  ifname  [IFNAMSIZ];
         int   value;
         char  command;
 } ipe_nlmsg_t;
-
 
 
 typedef struct {
@@ -53,14 +60,18 @@ typedef struct {
 
 
 
+
 /* Functions that extend usage netlink */
 enum {
         IPE_SET_VID    = 0,
-        IPE_SET_ETH    = 1, 
+        IPE_SET_ETH, 
 #ifdef IPE_DEBUG
         /* debug: */
-        IPE_PRINT_ADDR = 2,
+        IPE_PRINT_ADDR,
 #endif
+        IPE_SET_NAME,
+        IPE_SET_PARENT,
+
         IPE_COMMAND_COUNT,
 };
 
@@ -72,6 +83,8 @@ enum {
         IPE_OK             = 0,
         IPE_BAD_ARG,
         IPE_BAD_VID,
+        IPE_BAD_PTR,
+        IPE_BAD_DEV,
         IPE_BAD_IF_IDX,
         IPE_UNKNOWN_COMMAND,
         IPE_FAIL_NS,
