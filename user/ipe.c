@@ -69,7 +69,7 @@ static void print_msg(const ipe_nlmsg_t *msg) {
         for (i = 0; i < IPE_DEV_COUNT; ++i)
                 printf("ifid #%d: %d\n", i, msg->ifindex[i]);
         for (i = 0; i < IPE_DEV_COUNT; ++i)
-                printf("nsfd #%d: %d\n", i, msg->ifindex[i]);
+                printf("nsfd #%d: %d\n", i, msg->nsfd[i]);
 
         printf("ifname: %s\n", msg->ifname);
         printf("value: %d\n", msg->value);
