@@ -73,7 +73,7 @@ static void print_msg(const ipe_nlmsg_t *msg) {
 
         printf("ifname: %s\n", msg->ifname);
         printf("value: %d\n", msg->value);
-        printf("command: %c\n", msg->command);
+        printf("command: %d\n", msg->command);
 }
 //#endif
 
@@ -142,6 +142,8 @@ static void create_msg() {
         #ifdef IPE_DEBUG
                 else if (!strcmp(g_arg.ctype, "parent"))
                         msgs.command = IPE_PRINT_ADDR;
+                else if (!strcmp(g_arg.ctype, "list"))
+                        msgs.command = IPE_LIST;
 
                 printf("%s: memcpy %lu to %s\n", 
                                 __FUNCTION__, sizeof(msgs), (char *)nlh);
@@ -195,6 +197,10 @@ static void show_usage(void) {
         printf("                                       eth  [ ETH_TYPE ]\n");
         printf("                                       name [ IFNAME ]\n");
         printf("                                       dst IFINDEX [ dstns NETNS ] prev\n");
+#ifdef IPE_DEBUG
+        printf("                                       parent\n");
+        printf("           list\n");
+#endif
         printf("where ETH_TYPE := { 33024 for 0x8100 aka 802.1Q          |\n");
         printf("                    34984 for 0x88A8 aka 802.1ad         }\n");
         /* TODO: need support into kernelspace */
@@ -240,7 +246,7 @@ static int parse_arg(int args, char **argv) {
                         } else {
                                 goto usage_ret;
                         }
-                } else if (!strcmp(*argv, "netns")) {
+                } else if (matches("netns")) {
                         if (CHECK_ARGS(args)) {
                                 NEXT_ARG(args, argv);
                                 g_arg.net[IPE_SRC] = *argv;
@@ -251,7 +257,7 @@ static int parse_arg(int args, char **argv) {
                         } else {
                                 goto usage_ret;
                         }
-                } else if (!strcmp(*argv, "dstns")) {
+                } else if (matches("dstns")) {
                         if (CHECK_ARGS(args)) {
                                 NEXT_ARG(args, argv);
                                 g_arg.net[IPE_DST] = *argv;
@@ -305,7 +311,10 @@ static int parse_arg(int args, char **argv) {
                         g_arg.ctype = *argv;
                         goto ret_ok;
                 } else if (matches("parent")) {
-                        strcpy(g_arg.ifname, *argv);
+                        g_arg.ctype = *argv;
+                        goto ret_ok;
+                } else if (matches("list")) {
+                        g_arg.ctype = *argv;
                         goto ret_ok;
                 } else {
                         printf("%s: arg \"%s\" not matches\n", 
@@ -349,6 +358,9 @@ int main(int args, char **argv)
 
 #ifdef IPE_DEBUG
         printf("%s", reply.report);
+        printf("return code: %d\n", reply.retcode);
+        printf("%s: result is %s\n", __FUNCTION__,
+                       reply.retcode < IPE_ERR_COUNT ? errors[reply.retcode].name : "unknown");
 #endif
 
         free(nlh);

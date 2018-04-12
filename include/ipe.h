@@ -72,6 +72,7 @@ enum {
 #ifdef IPE_DEBUG
         /* debug: */
         IPE_PRINT_ADDR,
+        IPE_LIST,
 #endif
         IPE_SET_NAME,
         IPE_SET_PARENT,
@@ -109,5 +110,6 @@ enum {
         IPE_BAD_ALLOC,
         IPE_DEFAULT_FAIL,
 };
+
 
 #endif // __IPE_IPE_H

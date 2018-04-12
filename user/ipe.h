@@ -68,6 +68,7 @@ enum {
 #ifdef IPE_DEBUG
         /* debug: */
         IPE_PRINT_ADDR,
+        IPE_LIST,
 #endif
         IPE_SET_NAME,
         IPE_SET_PARENT,
@@ -75,7 +76,12 @@ enum {
         IPE_COMMAND_COUNT,
 };
 
+#define ERR_BUFF_LEN 64
 
+typedef struct {
+        int id;
+        char name[ERR_BUFF_LEN];
+} ipe_err_t;
 
 
 /* Error's code: */
@@ -94,6 +100,26 @@ enum {
         IPE_BAD_SOC,
         IPE_BAD_ALLOC,
         IPE_DEFAULT_FAIL,
+        IPE_ERR_COUNT,
+};
+
+
+
+static ipe_err_t errors[IPE_ERR_COUNT] = {
+        {IPE_OK, "IPE_OK"},
+        {IPE_BAD_ARG, "IPE_BAD_ARG"},
+        {IPE_BAD_VID, "IPE_BAD_VID"},
+        {IPE_BAD_PTR, "IPE_BAD_PTR"},
+        {IPE_BAD_DEV, "IPE_BAD_DEV"},
+        {IPE_BAD_IF_IDX, "IPE_BAD_IF_IDX"},
+        {IPE_UNKNOWN_COMMAND, "IPE_UNKNOWN_COMMAND"},
+        {IPE_FAIL_NS, "IPE_FAIL_NS"},
+        {IPE_FAIL_CR_SOC, "IPE_FAIL_CR_SOC"},
+        {IPE_FEW_ARG, "IPE_FEW_ARG"},
+        {IPE_NULLPTR, "IPE_NULLPTR"},
+        {IPE_BAD_SOC, "IPE_BAD_SOC"},
+        {IPE_BAD_ALLOC, "IPE_BAD_ALLOC"},
+        {IPE_DEFAULT_FAIL, "IPE_DEFAULT_FAIL"},
 };
 
 #endif // __IPE_IPE_H

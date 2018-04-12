@@ -46,13 +46,20 @@ typedef struct net_device ndev_t;
 static int set_vid(const ipe_nlmsg_t *msg);
 static int set_eth(const ipe_nlmsg_t *msg);
 static int set_name(const ipe_nlmsg_t *msg);
-static int set_parent(const ipe_nlmsg_t *msg);
+static int set_parent_d(const ipe_nlmsg_t *msg);
+
+extern int print_list_ndev(const ipe_nlmsg_t *msg);
 
 static int check_eth(const ipe_nlmsg_t *msg);
 static int check_vid(const ipe_nlmsg_t *msg);
 static int check_src(const ipe_nlmsg_t *msg);
+static int check_src_vlan(const ipe_nlmsg_t *msg);
+static int dummy(const ipe_nlmsg_t *msg);
 //static int check_ifname(const ipe_nlmsg_t *msg);
 static int check_everybody(const ipe_nlmsg_t *msg);
+
+static inline ndev_t *vlan_find_dev(ndev_t *real_dev,
+					       __be16 vlan_proto, u16 vlan_id);
 
 static struct sock *nl_sk = NULL;
 
@@ -62,10 +69,11 @@ static ipe_tool_t commap[IPE_COMMAND_COUNT] = {
         {set_eth, "set_eth", check_eth},
         /* debug: */
         #ifdef IPE_DEBUG
-                {show_vlan_info, "show_vlan_info", check_src},
+                {show_vlan_info, "show_vlan_info", check_src_vlan},
+                {print_list_ndev, "print_list_ndev", dummy},
         #endif
         {set_name, "set_name", check_src},
-        {set_parent, "set_parent", check_everybody},
+        {set_parent_d, "set_parent", check_everybody},
 };
 
 
@@ -99,6 +107,13 @@ ndev_t *get_dev(const ipe_nlmsg_t *msg, const int id) {
 }
 
 
+#ifdef IPE_DEBUG
+void printk_msg(const ipe_nlmsg_t *msg) {
+        printk(KERN_DEBUG "%s: value %d\n", __FUNCTION__, msg->value);
+        printk(KERN_DEBUG "%s: command %s\n", __FUNCTION__, commap[msg->command].name);
+}
+#endif
+
 
 
 static int check_vid(const ipe_nlmsg_t *msg) {
@@ -128,9 +143,19 @@ static int check_eth(const ipe_nlmsg_t *msg) {
         return IPE_OK;
 }
 
+static int dummy(const ipe_nlmsg_t *msg) {
+        return IPE_OK;
+}
 
 static int check_vlan(const ipe_nlmsg_t *msg, const int id) {
         ndev_t *vlan_dev = get_dev(msg, id);
+
+        if (IS_ERR_OR_NULL(vlan_dev)) {
+                printk(KERN_WARNING "%s: fail search device #%d info net_namespace [%d]\n",
+                       __FUNCTION__, msg->ifindex[id], msg->nsfd[id]);
+                return IPE_BAD_PTR;
+        }
+ 
         if (!is_vlan_dev(vlan_dev)) {
                 printk(KERN_WARNING "%s: device %s is not vlan type!\n", 
                                                 __FUNCTION__, vlan_dev->name);
@@ -138,7 +163,8 @@ static int check_vlan(const ipe_nlmsg_t *msg, const int id) {
                 return IPE_BAD_DEV;
         }
 
-
+        dev_put(vlan_dev);
+        return IPE_OK;
 }
 
 static int check_dev(const ipe_nlmsg_t *msg, const int id) {
@@ -158,17 +184,22 @@ static int check_src(const ipe_nlmsg_t *msg) {
         return check_dev(msg, IPE_SRC);
 }
 
+static int check_src_vlan(const ipe_nlmsg_t *msg) {
+        return check_vlan(msg, IPE_SRC);
+}
 
 static int check_everybody(const ipe_nlmsg_t *msg) {
         int res;
         int i;
         for (i = 0; i < IPE_DEV_COUNT; ++i) {
-                res = check_dev(msg, i);
+                res = check_vlan(msg, i);
                 if (res)
                         return res;
         }
 
-        res = check_vlan(msg, IPE_SRC);
+        #ifdef IPE_DEBUG
+                printk(KERN_DEBUG "%s; res %d\n", __FUNCTION__, res);
+        #endif
 
         return res ? res : IPE_OK;
 }
@@ -181,7 +212,7 @@ static ndev_t *unsafe_get_real_dev(ndev_t *dev) {
         return vlan->real_dev;
 }
 
-static int ipe_change_name(ndev_t *dev, const char *name) {
+static int unsafe_change_name(ndev_t *dev, const char *name) {
         strcpy(dev->name, name);
         return IPE_OK;
 }
@@ -193,45 +224,74 @@ static int set_name(const ipe_nlmsg_t *msg) {
         int res = IPE_OK;
         ndev_t *vlan_dev = get_dev(msg, IPE_SRC);
         rtnl_lock();
-        res = ipe_change_name(vlan_dev, msg->ifname);
+        res = unsafe_change_name(vlan_dev, msg->ifname);
         rtnl_unlock();
 
+        dev_put(vlan_dev);
         return res < 0 ? res : IPE_OK;
 }
 
 
+
 static int set_parent(const ipe_nlmsg_t *msg) {
+        int ret;
         #ifdef IPE_DEBUG
                 printk(KERN_DEBUG "%s has been called\n", __FUNCTION__);
         #endif
         ndev_t *src_dev  = get_dev(msg, IPE_SRC);
         ndev_t *dst_dev  = get_dev(msg, IPE_DST);
         ndev_t *real_dev = unsafe_get_real_dev(src_dev);
+        ndev_t *real_dst = unsafe_get_real_dev(dst_dev);
+
+        #ifdef IPE_DEBUG 
+                printk(KERN_DEBUG "%s: src_dev %p\n", __FUNCTION__, src_dev);
+                printk(KERN_DEBUG "%s: dst_dev %p\n", __FUNCTION__, dst_dev);
+                printk(KERN_DEBUG "%s: real_dev %p\n", __FUNCTION__, real_dev);
+                printk(KERN_DEBUG "%s: real_dst %p\n", __FUNCTION__, real_dst);
+        #endif
 
         struct vlan_dev_priv *src_vlan = vlan_dev_priv(src_dev);
 
-        if (!dst_dev) {
-                printk(KERN_ALERT "%s: bad dst_dev\n", __FUNCTION__);
-                goto set_put;
-        }
+        #ifdef IPE_DEBUG
+                printk(KERN_DEBUG "%s: src_vlan %p\n", __FUNCTION__, src_vlan);
+        #endif
 
         rtnl_lock();
 
         #ifdef IPE_DEBUG
                 printk(KERN_DEBUG "%s: lock\n", __FUNCTION__);
         #endif
-
-        struct vlan_info *src_vlan_info = rcu_dereference_rtnl(real_dev->vlan_info);
-        struct vlan_info *dst_vlan_info = rcu_dereference_rtnl(dst_dev->vlan_info);
-
-        if (!dst_vlan_info) {
-                printk(KERN_ERR "%s: fail rcu_dereference_rtnl dst_dev %p\n", 
-                                        __FUNCTION__, dst_dev);
+        if (!real_dst) {
+                printk(KERN_DEBUG "%s: real_dst nullptr\n", __FUNCTION__);
                 goto set_rtnl_unlock;
         }
 
-        BUG_ON(!src_vlan_info);
-        BUG_ON(!dst_vlan_info);
+        ret = vlan_vid_add(real_dev, src_vlan->vlan_proto, src_vlan->vlan_id);
+        if (ret)
+                goto set_rtnl_unlock;;
+
+        struct vlan_info *src_vlan_info = rcu_dereference_rtnl(real_dev->vlan_info);
+        #ifdef IPE_DEBUG
+                printk(KERN_DEBUG "%s: src_vlan_info %p\n", __FUNCTION__, src_vlan_info);
+        #endif
+        if (!src_vlan_info) {
+                printk(KERN_ERR "%s: fail rcu_dereference_rtnl real_dev->vlan_info %p\n", 
+                                        __FUNCTION__, real_dev->vlan_info);
+                goto set_rtnl_unlock;
+        }
+
+        struct vlan_info *dst_vlan_info = rcu_dereference_rtnl(real_dst->vlan_info);
+        #ifdef IPE_DEBUG
+                printk(KERN_DEBUG "%s: dst_vlan_info %p\n", __FUNCTION__, dst_vlan_info);
+        #endif
+        if (!dst_vlan_info) {
+                printk(KERN_ERR "%s: fail rcu_dereference_rtnl dst_dev %p\n", 
+                                        __FUNCTION__, real_dst->vlan_info);
+                goto set_rtnl_unlock;
+        }
+
+//        BUG_ON(!src_vlan_info);
+//        BUG_ON(!dst_vlan_info);
 
         if (vlan_group_prealloc_vid(&dst_vlan_info->grp, 
                                         src_vlan->vlan_proto, 
@@ -242,15 +302,28 @@ static int set_parent(const ipe_nlmsg_t *msg) {
         }
 
         #ifdef IPE_DEBUG
-                printk(KERN_DEBUG "%s: vlan_group_del_device\n", __FUNCTION__);
+                printk(KERN_DEBUG "%s: vlan_group_del_device success\n", __FUNCTION__);
         #endif
-        vlan_group_del_device(&src_vlan_info->grp,
-                               src_vlan->vlan_proto, src_vlan->vlan_id);
 
-        src_vlan->real_dev = dst_dev;
+        //src_vlan->real_dev = dst_dev;
+        
+        #ifdef IPE_DEBUG
+                printk(KERN_DEBUG "%s: unlink...\n", __FUNCTION__);
+        #endif
+        netdev_upper_dev_unlink(real_dev, src_dev);
+        #ifdef IPE_DEBUG
+                printk(KERN_DEBUG "%s: link...\n", __FUNCTION__);
+        #endif
+        ret = netdev_upper_dev_link(dst_dev, src_dev);
+        if (ret)
+                goto set_rtnl_unlock;
+
         vlan_group_set_device(&dst_vlan_info->grp, src_vlan->vlan_proto, 
                                                     src_vlan->vlan_id, src_dev);
-        // here will be: grp->nr_vlan_devs++;
+        vlan_group_del_device(&src_vlan_info->grp,
+                                        src_vlan->vlan_proto, src_vlan->vlan_id);
+        (&src_vlan_info->grp)->nr_vlan_devs--;
+        (&dst_vlan_info->grp)->nr_vlan_devs++;
         rtnl_unlock();
         #ifdef IPE_DEBUG
                 printk(KERN_DEBUG "%s: unlock\n", __FUNCTION__);
@@ -262,17 +335,16 @@ static int set_parent(const ipe_nlmsg_t *msg) {
         return IPE_OK;
 
 set_rtnl_unlock:
-        vlan_vid_del(dst_dev, src_vlan->vlan_proto, src_vlan->vlan_id);
+//        vlan_vid_del(dst_dev, src_vlan->vlan_proto, src_vlan->vlan_id);
         #ifdef IPE_DEBUG
                 printk(KERN_DEBUG "%s: unlock (fail)\n", __FUNCTION__);
         #endif
         rtnl_unlock();
 
-set_put:
         dev_put(dst_dev);
         dev_put(src_dev);
         #ifdef IPE_DEBUG
-                printk("%s: fail exit\n", __FUNCTION__);
+                printk(KERN_DEBUG "%s: fail exit\n", __FUNCTION__);
         #endif
         return IPE_DEFAULT_FAIL;
 
@@ -332,6 +404,7 @@ static int set_vid(const ipe_nlmsg_t *msg) {
         rtnl_unlock();
         dev_put(vlan_dev);
 
+
         return IPE_OK;
 
 set_rtnl_unlock:
@@ -339,6 +412,147 @@ set_rtnl_unlock:
         rtnl_unlock();
 
         dev_put(vlan_dev);
+        return IPE_DEFAULT_FAIL;
+}
+
+int vlan_check_real_dev(struct net_device *real_dev,
+			__be16 protocol, u16 vlan_id)
+{
+	const char *name = real_dev->name;
+
+	if (real_dev->features & NETIF_F_VLAN_CHALLENGED) {
+		pr_info("VLANs not supported on %s\n", name);
+		return -EOPNOTSUPP;
+	}
+
+	if (vlan_find_dev(real_dev, protocol, vlan_id) != NULL)
+		return -EEXIST;
+
+	return 0;
+}
+
+static inline ndev_t *__vlan_group_get_device(struct vlan_group *vg,
+							 unsigned int pidx,
+							 u16 vlan_id)
+{
+	struct net_device **array;
+
+	array = vg->vlan_devices_arrays[pidx]
+				       [vlan_id / VLAN_GROUP_ARRAY_PART_LEN];
+	return array ? array[vlan_id % VLAN_GROUP_ARRAY_PART_LEN] : NULL;
+}
+
+static inline ndev_t *vlan_group_get_device(struct vlan_group *vg,
+						       __be16 vlan_proto,
+						       u16 vlan_id)
+{
+	return __vlan_group_get_device(vg, vlan_proto_idx(vlan_proto), vlan_id);
+}
+
+static inline ndev_t *vlan_find_dev(ndev_t *real_dev,
+					       __be16 vlan_proto, u16 vlan_id)
+{
+	struct vlan_info *vlan_info = rcu_dereference_rtnl(real_dev->vlan_info);
+
+	if (vlan_info)
+		return vlan_group_get_device(&vlan_info->grp,
+					     vlan_proto, vlan_id);
+
+	return NULL;
+}
+
+static struct vlan_info *vlan_info_alloc(ndev_t *dev)
+{
+	struct vlan_info *vlan_info;
+
+	vlan_info = kzalloc(sizeof(struct vlan_info), GFP_KERNEL);
+	if (!vlan_info)
+		return NULL;
+
+	vlan_info->real_dev = dev;
+	INIT_LIST_HEAD(&vlan_info->vid_list);
+	return vlan_info;
+}
+
+/*
+ * TODO: This functions are very similary, should be think about 
+ * refactoring. Moreover, they is very long
+ */
+static int set_parent_d(const ipe_nlmsg_t *msg) {
+        #ifdef IPE_DEBUG
+                printk(KERN_DEBUG "%s has been called\n", __FUNCTION__);
+        #endif
+        int err;
+
+        ndev_t *vlan_dev = get_dev(msg, IPE_SRC);
+        ndev_t *real_dev = unsafe_get_real_dev(vlan_dev);
+        ndev_t *new_real_dev = get_dev(msg, IPE_DST);
+
+        struct vlan_dev_priv *vlan = vlan_dev_priv(vlan_dev);
+        BUG_ON(!vlan);
+
+        rtnl_lock();
+        __be16 vlan_proto = vlan->vlan_proto;
+        u16    vlan_id    = vlan->vlan_id;
+
+        err = vlan_check_real_dev(new_real_dev, vlan_proto, vlan_id);
+        if (err < 0) 
+                goto set_rtnl_unlock;
+
+        if (vlan_vid_add(real_dev, vlan_proto, vlan_id))
+                goto set_rtnl_unlock;
+
+        if (vlan_vid_add(new_real_dev, vlan_proto, vlan_id))
+                goto set_rtnl_unlock;
+
+        /*
+        #ifdef IPE_DEBUG
+                printk(KERN_DEBUG "%s: current proto #%x\n", 
+                                        __FUNCTION__, old_vlan_proto);
+        #endif
+        vlan->vlan_proto = htons(msg->value);
+        #ifdef IPE_DEBUG
+                printk(KERN_DEBUG "%s: new proto #%x\n", 
+                                        __FUNCTION__, vlan->vlan_proto);
+                printk(KERN_DEBUG "%s: find parent: %s by addr %p\n", 
+                                        __FUNCTION__, real_dev->name, real_dev);
+        #endif
+        */
+
+        struct vlan_info *vlan_info = rcu_dereference_rtnl(real_dev->vlan_info);
+        /* vlan_info should be there now. vlan_vid_add took care of it */
+        BUG_ON(!vlan_info);
+        struct vlan_info *dst_info = rcu_dereference_rtnl(new_real_dev->vlan_info);
+        BUG_ON(!vlan_info);
+        
+        //struct vlan_info *dst_info = vlan_info_alloc(new_real_dev);
+
+        vlan->real_dev = new_real_dev;
+
+        struct vlan_group *grp = &dst_info->grp;
+        if (vlan_group_prealloc_vid(grp, vlan_proto, vlan_id) < 0) {
+                printk(KERN_ERR "%s: fail alloc memory for vlan group %p!\n", 
+                                                           __FUNCTION__, grp);
+                goto set_rtnl_unlock;
+        }
+
+        vlan_group_del_device(&vlan_info->grp, vlan->vlan_proto, vlan->vlan_id);
+
+        vlan_group_set_device(&dst_info->grp, vlan->vlan_proto, 
+                                                       vlan->vlan_id, vlan_dev);
+        rtnl_unlock();
+
+        dev_put(vlan_dev);
+        dev_put(new_real_dev);
+        return IPE_OK;
+
+set_rtnl_unlock:
+        rtnl_unlock();
+        vlan_vid_del(real_dev, vlan->vlan_proto, vlan->vlan_id);
+
+ret_err:
+        dev_put(vlan_dev);
+        dev_put(new_real_dev);
         return IPE_DEFAULT_FAIL;
 }
 
