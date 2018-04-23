@@ -359,6 +359,17 @@ static struct vlan_info *vlan_info_alloc(ndev_t *dev)
 	return vlan_info;
 }
 
+
+
+static int check_loop_case(ndev_t *ldev, ndev_t *updev) {
+        /* updev must be not in uppers in ldev for IPE_OK */ 
+        if (netdev_has_upper_dev(ldev, updev)) 
+                return IPE_BAD_DEV;
+
+        return IPE_OK;
+}
+
+
 /*
  * TODO: This functions are very similary, should be think about 
  * refactoring. Moreover, they is very long
@@ -367,15 +378,28 @@ static int set_parent(const ipe_nlmsg_t *msg) {
         int err;
         __be16 vlan_proto;
         u16    vlan_id;
+        ndev_t *new_real_dev;
+
+        rtnl_lock();
 
         ndev_t *vlan_dev = get_dev(msg, IPE_SRC);
         ndev_t *real_dev = unsafe_get_real_dev(vlan_dev);
-        ndev_t *new_real_dev = get_dev(msg, IPE_DST);
+        if (!is_vlan_dev(real_dev)) {
+                printk(KERN_ERR "%s: device %s bounded with phy interface %s!\n",
+                                __FUNCTION__, vlan_dev->name, real_dev->name);
+                goto ret_err;
+        }
+
+        new_real_dev = get_dev(msg, IPE_DST);
+        if (check_loop_case(vlan_dev, new_real_dev)) {
+                printk(KERN_ERR "%s: device %s has %s as upper neighbour!\n",
+                                __FUNCTION__, vlan_dev->name, new_real_dev->name);
+                goto ret_err;
+        }
 
         struct vlan_dev_priv *vlan = vlan_dev_priv(vlan_dev);
         BUG_ON(!vlan);
 
-        rtnl_lock();
         vlan_proto = vlan->vlan_proto;
         vlan_id    = vlan->vlan_id;
 
@@ -423,8 +447,8 @@ set_rtnl_unlock:
 ret_err:
         dev_put(vlan_dev);
         dev_put(new_real_dev);
-
         rtnl_unlock();
+
         return IPE_DEFAULT_FAIL;
 }
 
