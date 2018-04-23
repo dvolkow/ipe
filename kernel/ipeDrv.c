@@ -387,20 +387,20 @@ static int set_parent(const ipe_nlmsg_t *msg) {
         if (!is_vlan_dev(real_dev)) {
                 printk(KERN_ERR "%s: device %s bounded with phy interface %s!\n",
                                 __FUNCTION__, vlan_dev->name, real_dev->name);
-                goto ret_err;
+                goto put_src_prev;
         }
 
         new_real_dev = get_dev(msg, IPE_DST);
         if (vlan_dev == new_real_dev) {
                 printk(KERN_ERR "%s: u try set self as parent!\n", 
                                 __FUNCTION__);
-                goto ret_err;
+                goto put_dst;
         }
 
         if (check_loop_case(vlan_dev, new_real_dev)) {
                 printk(KERN_ERR "%s: device %s has %s as upper neighbour!\n",
                                 __FUNCTION__, vlan_dev->name, new_real_dev->name);
-                goto ret_err;
+                goto put_dst;
         }
 
 
@@ -444,6 +444,7 @@ static int set_parent(const ipe_nlmsg_t *msg) {
 
         dev_put(vlan_dev);
         dev_put(new_real_dev);
+        dev_put(real_dev);
 
         rtnl_unlock();
         return IPE_OK;
@@ -451,9 +452,12 @@ static int set_parent(const ipe_nlmsg_t *msg) {
 set_rtnl_unlock:
         vlan_vid_del(real_dev, vlan->vlan_proto, vlan->vlan_id);
 
-ret_err:
-        dev_put(vlan_dev);
+put_dst:
         dev_put(new_real_dev);
+put_src_prev:
+        dev_put(real_dev);
+put_src:
+        dev_put(vlan_dev);
         rtnl_unlock();
 
         return IPE_DEFAULT_FAIL;
