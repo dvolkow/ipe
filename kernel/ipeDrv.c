@@ -391,11 +391,18 @@ static int set_parent(const ipe_nlmsg_t *msg) {
         }
 
         new_real_dev = get_dev(msg, IPE_DST);
+        if (vlan_dev == new_real_dev) {
+                printk(KERN_ERR "%s: u try set self as parent!\n", 
+                                __FUNCTION__);
+                goto ret_err;
+        }
+
         if (check_loop_case(vlan_dev, new_real_dev)) {
                 printk(KERN_ERR "%s: device %s has %s as upper neighbour!\n",
                                 __FUNCTION__, vlan_dev->name, new_real_dev->name);
                 goto ret_err;
         }
+
 
         struct vlan_dev_priv *vlan = vlan_dev_priv(vlan_dev);
         BUG_ON(!vlan);
