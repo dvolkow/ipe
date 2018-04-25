@@ -29,3 +29,5 @@ sudo insmod ../kernel/ipe.ko
 
 set_IP
 add_links
+
+ip a

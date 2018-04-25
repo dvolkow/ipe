@@ -117,6 +117,11 @@ void printk_msg(const ipe_nlmsg_t *msg) {
 
 
 static int check_vid(const ipe_nlmsg_t *msg) {
+
+        int ret = check_src_vlan(msg);
+        if (ret != IPE_OK) 
+                return ret;
+
         if (msg->value > VLAN_N_VID || msg->value < 0) {
                 printk(KERN_WARNING "%s: try set bad VID %d\n", 
                                                 __FUNCTION__, msg->value);
@@ -134,6 +139,10 @@ static int check_vid(const ipe_nlmsg_t *msg) {
 }
 
 static int check_eth(const ipe_nlmsg_t *msg) {
+        int ret = check_src_vlan(msg);
+        if (ret != IPE_OK) 
+                return ret;
+
         if (vlan_proto_idx(htons(msg->value)) == IPE_BAD_VLAN_PROTO) {
                 printk(KERN_WARNING "%s: try set bad VLAN ethertype: %x\n",
                                               __FUNCTION__, htons(msg->value));
@@ -198,7 +207,7 @@ static int check_everybody(const ipe_nlmsg_t *msg) {
         }
 
         #ifdef IPE_DEBUG
-                printk(KERN_DEBUG "%s; res %d\n", __FUNCTION__, res);
+                printk(KERN_DEBUG "%s: res %d\n", __FUNCTION__, res);
         #endif
 
         return res ? res : IPE_OK;
@@ -218,12 +227,10 @@ static int unsafe_change_name(ndev_t *dev, const char *name) {
 }
 
 static int set_name(const ipe_nlmsg_t *msg) {
-        #ifdef IPE_DEBUG
-                printk(KERN_DEBUG "%s has been called\n", __FUNCTION__);
-        #endif
         int res = IPE_OK;
-        ndev_t *vlan_dev = get_dev(msg, IPE_SRC);
+
         rtnl_lock();
+        ndev_t *vlan_dev = get_dev(msg, IPE_SRC);
         res = unsafe_change_name(vlan_dev, msg->ifname);
         rtnl_unlock();
 
@@ -234,17 +241,14 @@ static int set_name(const ipe_nlmsg_t *msg) {
 
 
 static int set_vid(const ipe_nlmsg_t *msg) {
-        #ifdef IPE_DEBUG
-                printk(KERN_DEBUG "%s has been called\n", __FUNCTION__);
-        #endif
 
+        rtnl_lock();
         ndev_t *vlan_dev = get_dev(msg, IPE_SRC);
         ndev_t *real_dev = unsafe_get_real_dev(vlan_dev);
 
         struct vlan_dev_priv *vlan = vlan_dev_priv(vlan_dev);
         BUG_ON(!vlan);
 
-        rtnl_lock();
 
         int old_vlan_id  = vlan->vlan_id;
 
@@ -299,20 +303,29 @@ set_rtnl_unlock:
 
 
 
+/* 
+ * WARNING! Must be call under rtnl_lock!
+ */
 int vlan_check_real_dev(struct net_device *real_dev,
 			__be16 protocol, u16 vlan_id)
 {
-	const char *name = real_dev->name;
+        int ret = IPE_OK;
+
+        dev_hold(real_dev);
 
 	if (real_dev->features & NETIF_F_VLAN_CHALLENGED) {
-		pr_info("VLANs not supported on %s\n", name);
-		return -EOPNOTSUPP;
+		pr_info("VLANs not supported on %s\n", real_dev->name);
+		ret = -EOPNOTSUPP;
+                goto vc_put;
 	}
 
 	if (vlan_find_dev(real_dev, protocol, vlan_id) != NULL)
-		return -EEXIST;
+		ret = -EEXIST;
 
-	return 0;
+vc_put:
+        dev_put(real_dev);
+
+	return ret;
 }
 
 static inline ndev_t *__vlan_group_get_device(struct vlan_group *vg,
@@ -380,6 +393,7 @@ static int set_parent(const ipe_nlmsg_t *msg) {
         u16    vlan_id;
         ndev_t *new_real_dev;
 
+
         rtnl_lock();
 
         ndev_t *vlan_dev = get_dev(msg, IPE_SRC);
@@ -387,13 +401,19 @@ static int set_parent(const ipe_nlmsg_t *msg) {
         if (!is_vlan_dev(real_dev)) {
                 printk(KERN_ERR "%s: device %s bounded with phy interface %s!\n",
                                 __FUNCTION__, vlan_dev->name, real_dev->name);
-                goto put_src_prev;
+                goto put_src;
         }
 
         new_real_dev = get_dev(msg, IPE_DST);
         if (vlan_dev == new_real_dev) {
                 printk(KERN_ERR "%s: u try set self as parent!\n", 
                                 __FUNCTION__);
+                goto put_dst;
+        }
+
+        if (real_dev == new_real_dev) {
+                printk(KERN_WARNING "%s: device %s already parent for %s\n",
+                                __FUNCTION__, new_real_dev->name, vlan_dev->name);
                 goto put_dst;
         }
 
@@ -426,9 +446,17 @@ static int set_parent(const ipe_nlmsg_t *msg) {
         struct vlan_info *dst_info = rcu_dereference_rtnl(new_real_dev->vlan_info);
         BUG_ON(!dst_info);
         
-        //struct vlan_info *dst_info = vlan_info_alloc(new_real_dev);
+        err = netdev_upper_dev_link(new_real_dev, vlan_dev);
+        if (err < 0)
+                goto set_rtnl_unlock;
 
         vlan->real_dev = new_real_dev;
+        netdev_upper_dev_unlink(real_dev, vlan_dev);
+        /* Get rid of the vlan's reference to real_dev */
+        dev_put(real_dev);
+
+        /* Account for reference in struct vlan_dev_priv */
+        dev_hold(new_real_dev);
 
         struct vlan_group *grp = &dst_info->grp;
         if (vlan_group_prealloc_vid(grp, vlan_proto, vlan_id) < 0) {
@@ -442,20 +470,18 @@ static int set_parent(const ipe_nlmsg_t *msg) {
         vlan_group_set_device(&dst_info->grp, vlan->vlan_proto, 
                                                        vlan->vlan_id, vlan_dev);
 
-        dev_put(vlan_dev);
         dev_put(new_real_dev);
-        dev_put(real_dev);
+        dev_put(vlan_dev);
 
         rtnl_unlock();
         return IPE_OK;
 
 set_rtnl_unlock:
-        vlan_vid_del(real_dev, vlan->vlan_proto, vlan->vlan_id);
+//      vlan_vid_del(real_dev, vlan->vlan_proto, vlan->vlan_id);
 
 put_dst:
         dev_put(new_real_dev);
 put_src_prev:
-        dev_put(real_dev);
 put_src:
         dev_put(vlan_dev);
         rtnl_unlock();
